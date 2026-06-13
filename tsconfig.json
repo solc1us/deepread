@@ -1,0 +1,3 @@
+{
+  "extends": "@deepread/config/tsconfig.base.json"
+}

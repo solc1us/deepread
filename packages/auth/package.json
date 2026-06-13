@@ -1,0 +1,24 @@
+{
+  "name": "@deepread/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@deepread/db": "workspace:*",
+    "@deepread/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@deepread/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
