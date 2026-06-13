@@ -1,7 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { Button } from "@deepread/ui/components/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@deepread/ui/components/card";
+import { Skeleton } from "@deepread/ui/components/skeleton";
+import { cn } from "@deepread/ui/lib/utils";
+import { AlertCircle, ArrowLeft, BookOpen, Clock, ExternalLink, FileText } from "lucide-react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 
 import { trpc } from "@/utils/trpc";
 
@@ -13,21 +18,61 @@ function formatDifficulty(value: string | undefined) {
   return value?.replace("_", " ") ?? "Unclassified";
 }
 
+function getDifficultyClass(value: string | undefined) {
+  switch (value) {
+    case "beginner_friendly":
+      return "bg-difficulty-beginner text-difficulty-beginner-foreground";
+    case "moderate":
+      return "bg-difficulty-moderate text-difficulty-moderate-foreground";
+    case "difficult":
+      return "bg-difficulty-difficult text-difficulty-difficult-foreground";
+    case "expert":
+      return "bg-difficulty-expert text-difficulty-expert-foreground";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
 export default function PaperDetail({ id }: PaperDetailProps) {
   const paper = useQuery(trpc.papers.detail.queryOptions({ id }));
 
   if (paper.isLoading) {
     return (
-      <main className="mx-auto w-full max-w-4xl px-4 py-6">
-        <div className="rounded-lg border p-4 text-sm text-muted-foreground">Loading paper...</div>
+      <main className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-8">
+        <Skeleton className="h-5 w-32 rounded-md" />
+        <Card className="rounded-lg border-border/80 shadow-sm">
+          <CardHeader>
+            <Skeleton className="h-8 w-5/6 rounded-md" />
+            <Skeleton className="h-4 w-1/2 rounded-md" />
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <Skeleton className="h-4 w-full rounded-md" />
+            <Skeleton className="h-4 w-11/12 rounded-md" />
+            <Skeleton className="h-4 w-4/5 rounded-md" />
+          </CardContent>
+        </Card>
       </main>
     );
   }
 
-  if (!paper.data) {
+  if (paper.isError || !paper.data) {
     return (
-      <main className="mx-auto w-full max-w-4xl px-4 py-6">
-        <div className="rounded-lg border p-4 text-sm text-muted-foreground">Paper not found.</div>
+      <main className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-8">
+        <Button className="w-fit rounded-md" nativeButton={false} variant="outline" render={<Link href="/papers" />}>
+          <ArrowLeft data-icon="inline-start" />
+          Back to papers
+        </Button>
+        <Card className="rounded-lg border-border/80 shadow-sm">
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertCircle className="mt-0.5 text-destructive" />
+            <div className="grid gap-1">
+              <div className="text-sm font-medium">Paper not found</div>
+              <p className="text-sm leading-6 text-muted-foreground">
+                This paper may not exist, may not be published, or the API server may be unavailable.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </main>
     );
   }
@@ -35,92 +80,140 @@ export default function PaperDetail({ id }: PaperDetailProps) {
   const classification = paper.data.classification;
 
   return (
-    <main className="mx-auto grid w-full max-w-4xl gap-6 px-4 py-6">
-      <Link className="text-sm text-muted-foreground hover:text-foreground" href="/papers">
+    <main className="mx-auto grid w-full max-w-4xl gap-5 px-4 py-8">
+      <Button className="w-fit rounded-md" nativeButton={false} variant="outline" render={<Link href="/papers" />}>
+        <ArrowLeft data-icon="inline-start" />
         Back to papers
-      </Link>
+      </Button>
 
-      <article className="grid gap-6">
-        <header className="grid gap-3">
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="rounded-md border px-2 py-1">{paper.data.category.name}</span>
-            <span className="rounded-md border px-2 py-1 capitalize">
-              {formatDifficulty(classification?.difficultyLevel)}
-            </span>
-            {classification ? (
-              <span className="rounded-md border px-2 py-1">Score {classification.beginnerScore}/100</span>
-            ) : null}
-          </div>
-          <h1 className="text-3xl font-semibold tracking-normal">{paper.data.title}</h1>
-          <p className="text-sm text-muted-foreground">
-            {paper.data.authors.join(", ")} {paper.data.publicationYear ? `- ${paper.data.publicationYear}` : ""}
-          </p>
-        </header>
-
-        <section className="grid gap-2">
-          <h2 className="text-lg font-semibold tracking-normal">Abstract</h2>
-          <p className="leading-7 text-muted-foreground">{paper.data.abstract}</p>
-        </section>
+      <article className="grid gap-5">
+        <Card className="rounded-xl border-border/80 shadow-sm">
+          <CardHeader className="gap-4">
+            <div className="flex flex-wrap gap-2 text-xs font-medium">
+              <span className="rounded-md border bg-background px-2.5 py-1 text-foreground">
+                {paper.data.category.name}
+              </span>
+              <span className={cn("rounded-md px-2.5 py-1 capitalize", getDifficultyClass(classification?.difficultyLevel))}>
+                {formatDifficulty(classification?.difficultyLevel)}
+              </span>
+              {classification ? (
+                <>
+                  <span className="rounded-md border bg-background px-2.5 py-1 text-foreground">
+                    Score {classification.beginnerScore}/100
+                  </span>
+                  <span className="rounded-md border bg-background px-2.5 py-1 text-foreground">
+                    {classification.estimatedReadingTime} min read
+                  </span>
+                </>
+              ) : null}
+            </div>
+            <div className="grid gap-3">
+              <h1 className="text-3xl font-semibold leading-tight tracking-normal md:text-4xl">
+                {paper.data.title}
+              </h1>
+              <p className="text-sm leading-6 text-muted-foreground">
+                {paper.data.authors.join(", ")} {paper.data.publicationYear ? `- ${paper.data.publicationYear}` : ""}
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 border-t pt-5">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <BookOpen />
+              Abstract
+            </div>
+            <p className="text-base leading-8 text-muted-foreground">{paper.data.abstract}</p>
+          </CardContent>
+        </Card>
 
         {classification ? (
-          <section className="grid gap-3 rounded-lg border p-4">
-            <h2 className="text-lg font-semibold tracking-normal">Reading Fit</h2>
-            <div className="grid gap-3 text-sm md:grid-cols-3">
-              <div>
-                <div className="text-muted-foreground">Difficulty</div>
-                <div className="font-medium capitalize">{formatDifficulty(classification.difficultyLevel)}</div>
+          <Card className="rounded-lg border-border/80 shadow-sm">
+            <CardHeader>
+              <CardTitle>Reading Fit</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              <div className="grid gap-3 text-sm md:grid-cols-3">
+                <div className="rounded-md border bg-background px-3 py-3">
+                  <div className="text-xs text-muted-foreground">Difficulty</div>
+                  <div className="mt-1 font-medium capitalize">{formatDifficulty(classification.difficultyLevel)}</div>
+                </div>
+                <div className="rounded-md border bg-background px-3 py-3">
+                  <div className="text-xs text-muted-foreground">Beginner score</div>
+                  <div className="mt-1 font-medium">{classification.beginnerScore}/100</div>
+                </div>
+                <div className="rounded-md border bg-background px-3 py-3">
+                  <div className="text-xs text-muted-foreground">Estimated time</div>
+                  <div className="mt-1 font-medium">{classification.estimatedReadingTime} minutes</div>
+                </div>
               </div>
-              <div>
-                <div className="text-muted-foreground">Beginner score</div>
-                <div className="font-medium">{classification.beginnerScore}/100</div>
+              <div className="grid gap-3">
+                <div className="rounded-md border bg-background p-3">
+                  <div className="mb-1 text-sm font-medium">Why this fit</div>
+                  <p className="text-sm leading-6 text-muted-foreground">{classification.classificationReason}</p>
+                </div>
+                <div className="rounded-md border bg-accent p-3">
+                  <div className="mb-1 text-sm font-medium text-accent-foreground">Reading warning</div>
+                  <p className="text-sm leading-6 text-muted-foreground">{classification.readingWarning}</p>
+                </div>
+                <div className="rounded-md border bg-background p-3">
+                  <div className="mb-1 text-sm font-medium">Recommended reader</div>
+                  <p className="text-sm leading-6 text-muted-foreground">{classification.recommendedReader}</p>
+                </div>
               </div>
-              <div>
-                <div className="text-muted-foreground">Reading time</div>
-                <div className="font-medium">{classification.estimatedReadingTime} minutes</div>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground">{classification.classificationReason}</p>
-            <p className="text-sm text-muted-foreground">{classification.readingWarning}</p>
-            <p className="text-sm text-muted-foreground">{classification.recommendedReader}</p>
-          </section>
+            </CardContent>
+          </Card>
         ) : null}
 
-        <section className="grid gap-3 rounded-lg border p-4 text-sm">
-          <h2 className="text-lg font-semibold tracking-normal">Source</h2>
-          <div className="grid gap-2">
-            <div>
-              <span className="text-muted-foreground">Provider: </span>
-              {paper.data.sourceName}
+        <Card className="rounded-lg border-border/80 shadow-sm">
+          <CardHeader>
+            <CardTitle>Source and Metadata</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <div className="grid gap-3 text-sm md:grid-cols-2">
+              <div className="rounded-md border bg-background px-3 py-3">
+                <div className="text-xs text-muted-foreground">Provider</div>
+                <div className="mt-1 font-medium">{paper.data.sourceName}</div>
+              </div>
+              {paper.data.doi ? (
+                <div className="rounded-md border bg-background px-3 py-3">
+                  <div className="text-xs text-muted-foreground">DOI</div>
+                  <div className="mt-1 break-words font-medium">{paper.data.doi}</div>
+                </div>
+              ) : null}
             </div>
-            {paper.data.doi ? (
-              <div>
-                <span className="text-muted-foreground">DOI: </span>
-                {paper.data.doi}
-              </div>
-            ) : null}
+
             {paper.data.keywords.length ? (
-              <div>
-                <span className="text-muted-foreground">Keywords: </span>
-                {paper.data.keywords.join(", ")}
+              <div className="flex flex-wrap gap-2">
+                {paper.data.keywords.map((keyword) => (
+                  <span className="rounded-md border bg-background px-2.5 py-1 text-xs text-muted-foreground" key={keyword}>
+                    {keyword}
+                  </span>
+                ))}
               </div>
             ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <a
-              className="rounded-md bg-primary px-3 py-2 text-primary-foreground"
-              href={paper.data.sourceUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              Open source
-            </a>
-            {paper.data.pdfUrl ? (
-              <a className="rounded-md border px-3 py-2" href={paper.data.pdfUrl} rel="noreferrer" target="_blank">
-                Open PDF
-              </a>
-            ) : null}
-          </div>
-        </section>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="rounded-md"
+                nativeButton={false}
+                render={<a href={paper.data.sourceUrl} rel="noreferrer" target="_blank" />}
+              >
+                <ExternalLink data-icon="inline-start" />
+                Open source
+              </Button>
+              {paper.data.pdfUrl ? (
+                <Button
+                  className="rounded-md"
+                  nativeButton={false}
+                  variant="outline"
+                  render={<a href={paper.data.pdfUrl} rel="noreferrer" target="_blank" />}
+                >
+                  <FileText data-icon="inline-start" />
+                  Open PDF
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
       </article>
     </main>
   );

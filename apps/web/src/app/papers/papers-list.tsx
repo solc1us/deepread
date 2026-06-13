@@ -1,7 +1,13 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { Button } from "@deepread/ui/components/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@deepread/ui/components/card";
+import { Input } from "@deepread/ui/components/input";
+import { Skeleton } from "@deepread/ui/components/skeleton";
+import { cn } from "@deepread/ui/lib/utils";
+import { AlertCircle, Clock, Search } from "lucide-react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 
 import { trpc } from "@/utils/trpc";
 
@@ -37,7 +43,7 @@ function getPage(value: string | undefined) {
   return Number.isInteger(page) && page > 0 ? page : 1;
 }
 
-function formatDifficulty(value: string | null) {
+function formatDifficulty(value: string | null | undefined) {
   return value?.replace("_", " ") ?? "Unclassified";
 }
 
@@ -57,6 +63,21 @@ function getSort(value: string | undefined): Sort {
   return sorts.find((item) => item.value === value)?.value ?? "newest";
 }
 
+function getDifficultyClass(value: string | null | undefined) {
+  switch (value) {
+    case "beginner_friendly":
+      return "bg-difficulty-beginner text-difficulty-beginner-foreground";
+    case "moderate":
+      return "bg-difficulty-moderate text-difficulty-moderate-foreground";
+    case "difficult":
+      return "bg-difficulty-difficult text-difficulty-difficult-foreground";
+    case "expert":
+      return "bg-difficulty-expert text-difficulty-expert-foreground";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
 function buildHref(filters: PapersListProps["initialFilters"], page: number) {
   const query: Record<string, string> = {};
 
@@ -70,6 +91,25 @@ function buildHref(filters: PapersListProps["initialFilters"], page: number) {
     pathname: "/papers",
     query,
   };
+}
+
+function PaperListSkeleton() {
+  return (
+    <div className="grid gap-3">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <Card className="rounded-lg border-border/80 shadow-sm" key={index}>
+          <CardHeader>
+            <Skeleton className="h-5 w-2/3 rounded-md" />
+            <Skeleton className="h-4 w-1/2 rounded-md" />
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <Skeleton className="h-4 w-full rounded-md" />
+            <Skeleton className="h-4 w-5/6 rounded-md" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
 }
 
 export default function PapersList({ initialFilters }: PapersListProps) {
@@ -90,110 +130,191 @@ export default function PapersList({ initialFilters }: PapersListProps) {
   );
 
   return (
-    <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-semibold tracking-normal">Papers</h1>
-        <p className="text-sm text-muted-foreground">
-          Browse published papers with beginner suitability metadata.
+    <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8">
+      <section className="grid gap-3">
+        <p className="text-xs font-medium uppercase tracking-[0.16em] text-accent-foreground">
+          Paper Library
         </p>
-      </div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="grid gap-2">
+            <h1 className="text-3xl font-semibold tracking-normal md:text-4xl">Find approachable papers</h1>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              Search the seeded library and compare category, difficulty, beginner score, and reading time before
+              opening a paper.
+            </p>
+          </div>
+          {papers.data ? (
+            <div className="rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground shadow-sm">
+              {papers.data.pagination.total} published papers
+            </div>
+          ) : null}
+        </div>
+      </section>
 
-      <form className="grid gap-3 rounded-lg border p-4 md:grid-cols-[1fr_220px_180px_150px_auto]">
-        <input
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-          defaultValue={initialFilters.q ?? ""}
-          name="q"
-          placeholder="Search title or abstract"
-        />
-        <select
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-          defaultValue={initialFilters.categoryId ?? ""}
-          name="categoryId"
-        >
-          <option value="">All categories</option>
-          {categories.data?.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-          defaultValue={difficulty ?? ""}
-          name="difficulty"
-        >
-          {difficulties.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <select className="h-10 rounded-md border bg-background px-3 text-sm" defaultValue={sort} name="sort">
-          {sorts.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <button className="h-10 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground" type="submit">
-          Filter
-        </button>
+      <form className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm md:grid-cols-[1fr_220px_180px_150px_auto]">
+        <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          Search
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="h-10 rounded-md bg-background pl-8 text-sm"
+              defaultValue={initialFilters.q ?? ""}
+              name="q"
+              placeholder="Title, abstract, or source"
+            />
+          </div>
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          Category
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+            defaultValue={initialFilters.categoryId ?? ""}
+            name="categoryId"
+          >
+            <option value="">All categories</option>
+            {categories.data?.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          Difficulty
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+            defaultValue={difficulty ?? ""}
+            name="difficulty"
+          >
+            {difficulties.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          Sort
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+            defaultValue={sort}
+            name="sort"
+          >
+            {sorts.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex items-end">
+          <Button className="h-10 w-full rounded-md" type="submit">
+            Filter
+          </Button>
+        </div>
       </form>
 
       {papers.isLoading ? (
-        <div className="rounded-lg border p-4 text-sm text-muted-foreground">Loading papers...</div>
+        <PaperListSkeleton />
+      ) : papers.isError ? (
+        <Card className="rounded-lg border-border/80 shadow-sm">
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertCircle className="mt-0.5 text-destructive" />
+            <div className="grid gap-1">
+              <div className="text-sm font-medium">Unable to load papers</div>
+              <p className="text-sm text-muted-foreground">Check that the API server is running and try again.</p>
+            </div>
+          </CardContent>
+        </Card>
       ) : papers.data?.papers.length ? (
         <div className="grid gap-3">
           {papers.data.papers.map((paper) => (
-            <Link
-              className="grid gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/50"
-              href={`/papers/${paper.id}`}
-              key={paper.id}
-            >
-              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                <div className="grid gap-1">
-                  <h2 className="text-lg font-semibold tracking-normal">{paper.title}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {paper.authors.join(", ")} {paper.publicationYear ? `- ${paper.publicationYear}` : ""}
-                  </p>
+            <Card className="rounded-lg border-border/80 shadow-sm transition-colors hover:border-primary/30" key={paper.id}>
+              <CardHeader className="gap-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="grid gap-2">
+                    <CardTitle className="text-lg leading-7 tracking-normal md:text-xl">{paper.title}</CardTitle>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      {paper.authors.join(", ")} {paper.publicationYear ? `- ${paper.publicationYear}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2 text-xs font-medium">
+                    <span className="rounded-md border bg-background px-2.5 py-1 text-foreground">
+                      {paper.category.name}
+                    </span>
+                    <span className={cn("rounded-md px-2.5 py-1 capitalize", getDifficultyClass(paper.difficultyLevel))}>
+                      {formatDifficulty(paper.difficultyLevel)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2 text-xs">
-                  <span className="rounded-md border px-2 py-1">{paper.category.name}</span>
-                  <span className="rounded-md border px-2 py-1 capitalize">
-                    {formatDifficulty(paper.difficultyLevel)}
-                  </span>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{paper.abstract}</p>
+                <div className="grid gap-2 text-sm sm:grid-cols-3">
+                  <div className="rounded-md border bg-background px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Beginner score</div>
+                    <div className="font-medium">{paper.beginnerScore !== null ? `${paper.beginnerScore}/100` : "Pending"}</div>
+                  </div>
+                  <div className="rounded-md border bg-background px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Estimated time</div>
+                    <div className="font-medium">
+                      {paper.estimatedReadingTime !== null ? `${paper.estimatedReadingTime} minutes` : "Pending"}
+                    </div>
+                  </div>
+                  <div className="rounded-md border bg-background px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Source</div>
+                    <div className="truncate font-medium">{paper.sourceName}</div>
+                  </div>
                 </div>
-              </div>
-              <p className="line-clamp-2 text-sm text-muted-foreground">{paper.abstract}</p>
-              <div className="flex flex-wrap gap-3 text-sm">
-                {paper.beginnerScore !== null ? <span>Score {paper.beginnerScore}/100</span> : null}
-                {paper.estimatedReadingTime !== null ? (
-                  <span>{paper.estimatedReadingTime} min read</span>
-                ) : null}
-                <span>{paper.sourceName}</span>
-              </div>
-            </Link>
+              </CardContent>
+              <CardFooter className="justify-between gap-3 bg-muted/35">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Clock />
+                  <span>Review fit before reading</span>
+                </div>
+                <Button className="rounded-md" nativeButton={false} render={<Link href={`/papers/${paper.id}`} />}>
+                  View details
+                </Button>
+              </CardFooter>
+            </Card>
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border p-4 text-sm text-muted-foreground">No papers found.</div>
+        <Card className="rounded-lg border-border/80 shadow-sm">
+          <CardContent className="grid gap-2 py-8 text-center">
+            <div className="text-sm font-medium">No papers found</div>
+            <p className="mx-auto max-w-md text-sm leading-6 text-muted-foreground">
+              Try a broader search or run the database seed to add development papers.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {papers.data ? (
-        <div className="flex items-center justify-between text-sm">
-          <span>
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground">
             Page {papers.data.pagination.page} of {Math.max(papers.data.pagination.totalPages, 1)}
           </span>
           <div className="flex gap-2">
             {page > 1 ? (
-              <Link className="rounded-md border px-3 py-2" href={buildHref(initialFilters, page - 1)}>
+              <Button
+                className="rounded-md"
+                nativeButton={false}
+                variant="outline"
+                render={<Link href={buildHref(initialFilters, page - 1)} />}
+              >
                 Previous
-              </Link>
+              </Button>
             ) : null}
             {page < papers.data.pagination.totalPages ? (
-              <Link className="rounded-md border px-3 py-2" href={buildHref(initialFilters, page + 1)}>
+              <Button
+                className="rounded-md"
+                nativeButton={false}
+                variant="outline"
+                render={<Link href={buildHref(initialFilters, page + 1)} />}
+              >
                 Next
-              </Link>
+              </Button>
             ) : null}
           </div>
         </div>

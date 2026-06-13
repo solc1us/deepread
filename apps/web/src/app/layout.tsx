@@ -1,23 +1,18 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 
 import "../index.css";
 import Header from "@/components/header";
 import Providers from "@/components/providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "deepread",
-  description: "deepread",
+  title: "DeepRead",
+  description: "A calm academic reading desk for beginner-friendly paper discovery.",
 };
 
 export default function RootLayout({
@@ -27,9 +22,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${inter.variable} min-h-svh antialiased`}>
         <Providers>
-          <div className="grid grid-rows-[auto_1fr] h-svh">
+          <div className="grid min-h-svh grid-rows-[auto_1fr]">
             <Header />
             {children}
           </div>
