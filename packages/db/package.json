@@ -10,11 +10,13 @@
     }
   },
   "scripts": {
-    "db:push": "prisma db push",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "postinstall": "prisma generate",
-    "db:studio": "prisma studio"
+    "db:push": "bunx --bun prisma db push",
+    "db:generate": "bunx --bun prisma generate",
+    "db:migrate": "bunx --bun prisma migrate dev",
+    "db:seed": "bunx --bun prisma db seed",
+    "db:format": "bunx --bun prisma format",
+    "postinstall": "bunx --bun prisma generate",
+    "db:studio": "bunx --bun prisma studio"
   },
   "dependencies": {
     "@deepread/env": "workspace:*",
