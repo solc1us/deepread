@@ -97,3 +97,40 @@ deepread/
 - `bun run db:generate`: Generate database client/types
 - `bun run db:migrate`: Run database migrations
 - `bun run db:studio`: Open database studio UI
+
+## OpenAlex Ingestion
+
+Manual OpenAlex ingestion is currently exposed through temporary secret-protected tRPC procedures:
+
+- `admin.ingestion.runOpenAlex`
+- `admin.ingestion.logs`
+
+Set `ADMIN_INGESTION_SECRET` in `apps/server/.env`, then send it as the `x-admin-secret` header. This is a Phase 3 temporary guard and should be replaced by real admin auth later.
+
+Imported OpenAlex papers are saved with `status = pending`, so they do not appear in the public paper library while the frontend only lists `published` papers. Classification and publishing happen in later phases.
+
+Run a small manual ingestion from the repo root:
+
+```bash
+curl -X POST http://localhost:3000/trpc/admin.ingestion.runOpenAlex \
+  -H "content-type: application/json" \
+  -H "x-admin-secret: your-dev-secret" \
+  --data '{"json":{"categoryId":"CATEGORY_UUID","query":"student learning","limit":3}}'
+```
+
+Check recent ingestion logs:
+
+```bash
+curl -X POST http://localhost:3000/trpc/admin.ingestion.logs \
+  -H "content-type: application/json" \
+  -H "x-admin-secret: your-dev-secret" \
+  --data '{"json":{"limit":20}}'
+```
+
+DEV ONLY scripts are available for local checks and are not run automatically:
+
+```bash
+bun run --cwd apps/server dev:db-health
+bun run --cwd apps/server dev:test-openalex
+bun run --cwd apps/server dev:ingest-openalex
+```

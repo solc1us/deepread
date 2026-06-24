@@ -8,6 +8,7 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
     CORS_ORIGIN: z.url(),
+    ADMIN_INGESTION_SECRET: z.string().min(1).optional(),
     OPENALEX_API_KEY: z.string().optional(),
     OPENALEX_BASE_URL: z.url().default("https://api.openalex.org"),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
