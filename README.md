@@ -115,7 +115,7 @@ ADMIN_NAME=DeepRead Admin
 
 The seed skips admin creation when `ADMIN_EMAIL` or `ADMIN_PASSWORD` is missing.
 
-Imported OpenAlex papers are saved with `status = pending`, so they do not appear in the public paper library while the frontend only lists `published` papers. Classification and publishing happen in later phases.
+Imported OpenAlex papers are saved with `status = pending`, so they do not appear in the public paper library while the frontend only lists `published` papers. Run classification to save `paper_classifications` and publish valid papers.
 
 Sign in as the admin user first and keep the Better Auth session cookies. In Postman, call:
 
@@ -146,10 +146,57 @@ curl -X POST http://localhost:3000/trpc/admin.ingestion.logs \
 
 Guest requests fail with `UNAUTHORIZED`. Signed-in non-admin users fail with `FORBIDDEN`.
 
+## Rule-Based Classification
+
+Phase 4 uses deterministic metadata-only classification from paper title, abstract, keywords, category, and publication year. PDF parsing is intentionally not part of the MVP, so reading time and difficulty are heuristic estimates rather than full-text analysis.
+
+Classify pending papers locally with the DEV ONLY script:
+
+```bash
+bun run --cwd apps/server dev:classify-pending
+```
+
+Admin classification tRPC procedures:
+
+- `admin.classification.runForPaper`: classify or reclassify one paper by ID.
+- `admin.classification.runBatch`: classify pending papers, default `limit = 10`, max `50`.
+- `admin.classification.preview`: run the pure classifier without database writes.
+
+Use the same Better Auth admin session cookie described above.
+
+Classify or reclassify one paper:
+
+```bash
+curl -X POST http://localhost:3000/trpc/admin.classification.runForPaper \
+  -H "content-type: application/json" \
+  -b "PASTE_BETTER_AUTH_SESSION_COOKIE_HERE" \
+  --data '{"json":{"paperId":"PAPER_UUID"}}'
+```
+
+Classify pending papers in a small batch:
+
+```bash
+curl -X POST http://localhost:3000/trpc/admin.classification.runBatch \
+  -H "content-type: application/json" \
+  -b "PASTE_BETTER_AUTH_SESSION_COOKIE_HERE" \
+  --data '{"json":{"limit":5}}'
+```
+
+Preview a classification without database writes:
+
+```bash
+curl -X POST http://localhost:3000/trpc/admin.classification.preview \
+  -H "content-type: application/json" \
+  -b "PASTE_BETTER_AUTH_SESSION_COOKIE_HERE" \
+  --data '{"json":{"title":"Paper title","abstract":"This study examines student learning habits using survey responses.","keywords":["student learning"],"categoryName":"Education","publicationYear":2024}}'
+```
+
 DEV ONLY scripts are available for local checks and are not run automatically:
 
 ```bash
 bun run --cwd apps/server dev:db-health
+bun run --cwd apps/server dev:test-classifier
 bun run --cwd apps/server dev:test-openalex
 bun run --cwd apps/server dev:ingest-openalex
+bun run --cwd apps/server dev:classify-pending
 ```
