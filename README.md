@@ -100,21 +100,38 @@ deepread/
 
 ## OpenAlex Ingestion
 
-Manual OpenAlex ingestion is currently exposed through temporary secret-protected tRPC procedures:
+Manual OpenAlex ingestion is exposed through admin-only tRPC procedures:
 
 - `admin.ingestion.runOpenAlex`
 - `admin.ingestion.logs`
 
-Set `ADMIN_INGESTION_SECRET` in `apps/server/.env`, then send it as the `x-admin-secret` header. This is a Phase 3 temporary guard and should be replaced by real admin auth later.
+Admin access uses the existing Better Auth session. Seed a development admin by setting these values in `apps/server/.env`, then running `bun run db:seed`:
+
+```bash
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=change-this-dev-password
+ADMIN_NAME=DeepRead Admin
+```
+
+The seed skips admin creation when `ADMIN_EMAIL` or `ADMIN_PASSWORD` is missing.
 
 Imported OpenAlex papers are saved with `status = pending`, so they do not appear in the public paper library while the frontend only lists `published` papers. Classification and publishing happen in later phases.
 
-Run a small manual ingestion from the repo root:
+Sign in as the admin user first and keep the Better Auth session cookies. In Postman, call:
+
+```bash
+POST http://localhost:3000/api/auth/sign-in/email
+content-type: application/json
+
+{"email":"admin@example.com","password":"change-this-dev-password"}
+```
+
+Then run a small manual ingestion with the same cookie jar:
 
 ```bash
 curl -X POST http://localhost:3000/trpc/admin.ingestion.runOpenAlex \
   -H "content-type: application/json" \
-  -H "x-admin-secret: your-dev-secret" \
+  -b "PASTE_BETTER_AUTH_SESSION_COOKIE_HERE" \
   --data '{"json":{"categoryId":"CATEGORY_UUID","query":"student learning","limit":3}}'
 ```
 
@@ -123,9 +140,11 @@ Check recent ingestion logs:
 ```bash
 curl -X POST http://localhost:3000/trpc/admin.ingestion.logs \
   -H "content-type: application/json" \
-  -H "x-admin-secret: your-dev-secret" \
+  -b "PASTE_BETTER_AUTH_SESSION_COOKIE_HERE" \
   --data '{"json":{"limit":20}}'
 ```
+
+Guest requests fail with `UNAUTHORIZED`. Signed-in non-admin users fail with `FORBIDDEN`.
 
 DEV ONLY scripts are available for local checks and are not run automatically:
 

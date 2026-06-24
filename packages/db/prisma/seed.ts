@@ -1,7 +1,9 @@
 import { PrismaPg } from "@prisma/adapter-pg";
+import { hashPassword } from "better-auth/crypto";
 import dotenv from "dotenv";
+import { randomUUID } from "node:crypto";
 
-import { DifficultyLevel, PaperStatus, PrismaClient } from "./generated/client";
+import { DifficultyLevel, PaperStatus, PrismaClient, UserRole } from "./generated/client";
 
 dotenv.config({
   path: "../../apps/server/.env",
@@ -18,6 +20,10 @@ const prisma = new PrismaClient({
     connectionString,
   }),
 });
+
+const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+const adminPassword = process.env.ADMIN_PASSWORD;
+const adminName = process.env.ADMIN_NAME?.trim() || "DeepRead Admin";
 
 const categories = [
   {
@@ -473,6 +479,64 @@ async function main() {
       },
     });
   }
+
+  if (!adminEmail || !adminPassword) {
+    console.info("Admin seed skipped. Set ADMIN_EMAIL and ADMIN_PASSWORD in apps/server/.env to create a dev admin.");
+    return;
+  }
+
+  const passwordHash = await hashPassword(adminPassword);
+  const adminUser = await prisma.user.upsert({
+    where: {
+      email: adminEmail,
+    },
+    update: {
+      name: adminName,
+      role: UserRole.admin,
+      emailVerified: true,
+    },
+    create: {
+      id: randomUUID(),
+      name: adminName,
+      email: adminEmail,
+      emailVerified: true,
+      role: UserRole.admin,
+    },
+  });
+
+  const existingCredentialAccount = await prisma.account.findFirst({
+    where: {
+      userId: adminUser.id,
+      providerId: "credential",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingCredentialAccount) {
+    await prisma.account.update({
+      where: {
+        id: existingCredentialAccount.id,
+      },
+      data: {
+        accountId: adminUser.id,
+        password: passwordHash,
+      },
+    });
+  } else {
+    await prisma.account.create({
+      data: {
+        id: randomUUID(),
+        accountId: adminUser.id,
+        providerId: "credential",
+        userId: adminUser.id,
+        password: passwordHash,
+      },
+    });
+  }
+
+  console.info(`Admin seed completed for ${adminEmail}.`);
 }
 
 await main()

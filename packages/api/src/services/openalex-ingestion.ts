@@ -48,7 +48,6 @@ function buildErrorMessage(error: unknown) {
     process.env.DATABASE_URL,
     process.env.DIRECT_URL,
     process.env.OPENALEX_API_KEY,
-    process.env.ADMIN_INGESTION_SECRET,
   ].filter((value): value is string => Boolean(value));
 
   return sensitiveValues.reduce((sanitized, value) => sanitized.replaceAll(value, "[redacted]"), message);
