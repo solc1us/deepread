@@ -2,6 +2,7 @@ import { Button } from "@deepread/ui/components/button";
 import { Input } from "@deepread/ui/components/input";
 import { Label } from "@deepread/ui/components/label";
 import { useForm } from "@tanstack/react-form";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import z from "zod";
@@ -29,7 +30,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
         },
         {
           onSuccess: () => {
-            router.push("/dashboard");
+            router.push("/profile" as Route);
             toast.success("Sign up successful");
           },
           onError: (error) => {
