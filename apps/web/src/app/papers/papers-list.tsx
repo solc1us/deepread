@@ -5,11 +5,14 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@deepread/
 import { Input } from "@deepread/ui/components/input";
 import { Skeleton } from "@deepread/ui/components/skeleton";
 import { cn } from "@deepread/ui/lib/utils";
-import { AlertCircle, Clock, Search } from "lucide-react";
+import { AlertCircle, Bookmark, BookmarkCheck, Clock, Search } from "lucide-react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
-import { trpc } from "@/utils/trpc";
+import { authClient } from "@/lib/auth-client";
+import { queryClient, trpc } from "@/utils/trpc";
 
 const difficulties = [
   { value: "", label: "All difficulties" },
@@ -113,6 +116,9 @@ function PaperListSkeleton() {
 }
 
 export default function PapersList({ initialFilters }: PapersListProps) {
+  const router = useRouter();
+  const session = authClient.useSession();
+  const isAuthenticated = Boolean(session.data?.user);
   const page = getPage(initialFilters.page);
   const difficulty = getDifficulty(initialFilters.difficulty);
   const sort = getSort(initialFilters.sort);
@@ -128,6 +134,41 @@ export default function PapersList({ initialFilters }: PapersListProps) {
       limit: 10,
     }),
   );
+  const refreshPapers = async () => {
+    await queryClient.invalidateQueries({ queryKey: trpc.papers.list.queryKey() });
+  };
+  const addBookmark = useMutation(
+    trpc.bookmark.add.mutationOptions({
+      onSuccess: async () => {
+        await refreshPapers();
+        toast.success("Paper bookmarked");
+      },
+      onError: (error) => toast.error(error.message),
+    }),
+  );
+  const removeBookmark = useMutation(
+    trpc.bookmark.remove.mutationOptions({
+      onSuccess: async () => {
+        await refreshPapers();
+        toast.success("Bookmark removed");
+      },
+      onError: (error) => toast.error(error.message),
+    }),
+  );
+
+  const toggleBookmark = (paperId: string, isBookmarked: boolean) => {
+    if (!isAuthenticated) {
+      toast.info("Sign in to bookmark papers");
+      router.push("/login");
+      return;
+    }
+
+    if (isBookmarked) {
+      removeBookmark.mutate({ paperId });
+    } else {
+      addBookmark.mutate({ paperId });
+    }
+  };
 
   return (
     <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8">
@@ -250,7 +291,7 @@ export default function PapersList({ initialFilters }: PapersListProps) {
               </CardHeader>
               <CardContent className="grid gap-4">
                 <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{paper.abstract}</p>
-                <div className="grid gap-2 text-sm sm:grid-cols-3">
+                <div className={cn("grid gap-2 text-sm sm:grid-cols-3", isAuthenticated && "lg:grid-cols-4")}>
                   <div className="rounded-md border bg-background px-3 py-2">
                     <div className="text-xs text-muted-foreground">Beginner score</div>
                     <div className="font-medium">{paper.beginnerScore !== null ? `${paper.beginnerScore}/100` : "Pending"}</div>
@@ -265,6 +306,17 @@ export default function PapersList({ initialFilters }: PapersListProps) {
                     <div className="text-xs text-muted-foreground">Source</div>
                     <div className="truncate font-medium">{paper.sourceName}</div>
                   </div>
+                  {isAuthenticated ? (
+                    <div className="rounded-md border bg-background px-3 py-2">
+                      <div className="text-xs text-muted-foreground">Your reading</div>
+                      <div className="font-medium capitalize">
+                        {paper.userProgress?.status.replace("_", " ") ?? "Not started"}
+                      </div>
+                      {paper.userProgress ? (
+                        <div className="text-xs text-muted-foreground">{paper.userProgress.progressPercentage}% progress</div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </CardContent>
               <CardFooter className="justify-between gap-3 bg-muted/35">
@@ -272,9 +324,25 @@ export default function PapersList({ initialFilters }: PapersListProps) {
                   <Clock />
                   <span>Review fit before reading</span>
                 </div>
-                <Button className="rounded-md" nativeButton={false} render={<Link href={`/papers/${paper.id}`} />}>
-                  View details
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    aria-label={paper.isBookmarked ? "Remove bookmark" : "Bookmark paper"}
+                    disabled={
+                      session.isPending ||
+                      (addBookmark.isPending && addBookmark.variables?.paperId === paper.id) ||
+                      (removeBookmark.isPending && removeBookmark.variables?.paperId === paper.id)
+                    }
+                    onClick={() => toggleBookmark(paper.id, paper.isBookmarked)}
+                    size="icon"
+                    title={paper.isBookmarked ? "Remove bookmark" : "Bookmark paper"}
+                    variant="outline"
+                  >
+                    {paper.isBookmarked ? <BookmarkCheck /> : <Bookmark />}
+                  </Button>
+                  <Button className="rounded-md" nativeButton={false} render={<Link href={`/papers/${paper.id}`} />}>
+                    View details
+                  </Button>
+                </div>
               </CardFooter>
             </Card>
           ))}

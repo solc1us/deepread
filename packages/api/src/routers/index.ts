@@ -35,6 +35,81 @@ const adminClassificationPreviewInputSchema = z.object({
   categoryName: z.string().trim().min(1).optional(),
   publicationYear: z.number().int().min(1900).max(2100).nullable().optional(),
 });
+const paperIdInputSchema = z.object({
+  paperId: z.string().uuid(),
+});
+const updateReadingProgressInputSchema = paperIdInputSchema.extend({
+  progressPercentage: z.number().int().min(0).max(100),
+});
+const noteTextSchema = z.string().trim().min(1).max(2000);
+const noteSectionSchema = z.string().trim().max(100).optional();
+const createNoteInputSchema = paperIdInputSchema.extend({
+  note: noteTextSchema,
+  section: noteSectionSchema,
+});
+const updateNoteInputSchema = z.object({
+  noteId: z.string().uuid(),
+  note: noteTextSchema,
+  section: noteSectionSchema,
+});
+const noteIdInputSchema = z.object({
+  noteId: z.string().uuid(),
+});
+
+const readingProgressSelect = {
+  id: true,
+  userId: true,
+  paperId: true,
+  status: true,
+  progressPercentage: true,
+  startedAt: true,
+  completedAt: true,
+  lastReadAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+const bookmarkSelect = {
+  id: true,
+  userId: true,
+  paperId: true,
+  createdAt: true,
+  paper: {
+    select: {
+      id: true,
+      title: true,
+      abstract: true,
+      authors: true,
+      publicationYear: true,
+      sourceName: true,
+      sourceUrl: true,
+      pdfUrl: true,
+      category: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      classification: {
+        select: {
+          difficultyLevel: true,
+          beginnerScore: true,
+          estimatedReadingTime: true,
+        },
+      },
+    },
+  },
+} as const;
+
+const readingNoteSelect = {
+  id: true,
+  userId: true,
+  paperId: true,
+  note: true,
+  section: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 function toStringArray(value: unknown) {
   if (!Array.isArray(value)) {
@@ -42,6 +117,112 @@ function toStringArray(value: unknown) {
   }
 
   return value.filter((item): item is string => typeof item === "string");
+}
+
+async function ensurePublishedPaper(paperId: string) {
+  const paper = await prisma.paper.findFirst({
+    where: {
+      id: paperId,
+      status: "published",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!paper) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Published paper not found",
+    });
+  }
+
+  return paper;
+}
+
+async function ensurePaperExists(paperId: string) {
+  const paper = await prisma.paper.findUnique({
+    where: {
+      id: paperId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!paper) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Paper not found",
+    });
+  }
+
+  return paper;
+}
+
+async function requireOwnedNote(noteId: string, userId: string) {
+  const note = await prisma.readingNote.findUnique({
+    where: {
+      id: noteId,
+    },
+    select: {
+      id: true,
+      userId: true,
+    },
+  });
+
+  if (!note) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Reading note not found",
+    });
+  }
+
+  if (note.userId !== userId) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You do not have access to this reading note",
+    });
+  }
+
+  return note;
+}
+
+function mapBookmark(bookmark: {
+  id: string;
+  userId: string;
+  paperId: string;
+  createdAt: Date;
+  paper: {
+    id: string;
+    title: string;
+    abstract: string;
+    authors: unknown;
+    publicationYear: number | null;
+    sourceName: string;
+    sourceUrl: string;
+    pdfUrl: string | null;
+    category: {
+      id: string;
+      name: string;
+    };
+    classification: {
+      difficultyLevel: "beginner_friendly" | "moderate" | "difficult" | "expert";
+      beginnerScore: number;
+      estimatedReadingTime: number;
+    } | null;
+  };
+}) {
+  return {
+    id: bookmark.id,
+    userId: bookmark.userId,
+    paperId: bookmark.paperId,
+    createdAt: bookmark.createdAt,
+    paper: {
+      ...bookmark.paper,
+      authors: toStringArray(bookmark.paper.authors),
+    },
+  };
 }
 
 export const appRouter = router({
@@ -88,7 +269,8 @@ export const appRouter = router({
           limit: z.number().int().min(1).max(50).default(10),
         }),
       )
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        const currentUserId = ctx.session?.user.id ?? "__guest__";
         const where = {
           status: "published" as const,
           ...(input.categoryId ? { categoryId: input.categoryId } : {}),
@@ -160,6 +342,25 @@ export const appRouter = router({
                   estimatedReadingTime: true,
                 },
               },
+              readingProgress: {
+                where: {
+                  userId: currentUserId,
+                },
+                take: 1,
+                select: {
+                  status: true,
+                  progressPercentage: true,
+                },
+              },
+              bookmarks: {
+                where: {
+                  userId: currentUserId,
+                },
+                take: 1,
+                select: {
+                  id: true,
+                },
+              },
             },
           }),
           prisma.paper.count({
@@ -180,6 +381,8 @@ export const appRouter = router({
             difficultyLevel: paper.classification?.difficultyLevel ?? null,
             beginnerScore: paper.classification?.beginnerScore ?? null,
             estimatedReadingTime: paper.classification?.estimatedReadingTime ?? null,
+            userProgress: paper.readingProgress[0] ?? null,
+            isBookmarked: paper.bookmarks.length > 0,
           })),
           pagination: {
             page: input.page,
@@ -195,7 +398,8 @@ export const appRouter = router({
           id: z.string().uuid(),
         }),
       )
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        const currentUserId = ctx.session?.user.id ?? "__guest__";
         const paper = await prisma.paper.findFirst({
           where: {
             id: input.id,
@@ -229,15 +433,26 @@ export const appRouter = router({
                 recommendedReader: true,
               },
             },
-            sources: {
-              orderBy: {
-                fetchedAt: "desc",
+            readingProgress: {
+              where: {
+                userId: currentUserId,
               },
+              take: 1,
+              select: {
+                status: true,
+                progressPercentage: true,
+                startedAt: true,
+                completedAt: true,
+                lastReadAt: true,
+              },
+            },
+            bookmarks: {
+              where: {
+                userId: currentUserId,
+              },
+              take: 1,
               select: {
                 id: true,
-                provider: true,
-                externalId: true,
-                fetchedAt: true,
               },
             },
           },
@@ -264,9 +479,282 @@ export const appRouter = router({
           language: paper.language,
           category: paper.category,
           classification: paper.classification,
-          sources: paper.sources,
+          userProgress: paper.readingProgress[0] ?? null,
+          isBookmarked: paper.bookmarks.length > 0,
         };
       }),
+  }),
+  reading: router({
+    start: protectedProcedure.input(paperIdInputSchema).mutation(async ({ ctx, input }) => {
+      await ensurePublishedPaper(input.paperId);
+
+      const now = new Date();
+      const existing = await prisma.readingProgress.findUnique({
+        where: {
+          userId_paperId: {
+            userId: ctx.session.user.id,
+            paperId: input.paperId,
+          },
+        },
+        select: readingProgressSelect,
+      });
+
+      if (existing) {
+        return await prisma.readingProgress.update({
+          where: {
+            userId_paperId: {
+              userId: ctx.session.user.id,
+              paperId: input.paperId,
+            },
+          },
+          data: {
+            status: "reading",
+            startedAt: existing.startedAt ?? now,
+            lastReadAt: now,
+          },
+          select: readingProgressSelect,
+        });
+      }
+
+      return await prisma.readingProgress.create({
+        data: {
+          userId: ctx.session.user.id,
+          paperId: input.paperId,
+          status: "reading",
+          progressPercentage: 0,
+          startedAt: now,
+          lastReadAt: now,
+        },
+        select: readingProgressSelect,
+      });
+    }),
+    updateProgress: protectedProcedure.input(updateReadingProgressInputSchema).mutation(async ({ ctx, input }) => {
+      await ensurePublishedPaper(input.paperId);
+
+      const now = new Date();
+      const existing = await prisma.readingProgress.findUnique({
+        where: {
+          userId_paperId: {
+            userId: ctx.session.user.id,
+            paperId: input.paperId,
+          },
+        },
+        select: readingProgressSelect,
+      });
+      const isCompleted = input.progressPercentage === 100;
+
+      if (existing) {
+        return await prisma.readingProgress.update({
+          where: {
+            userId_paperId: {
+              userId: ctx.session.user.id,
+              paperId: input.paperId,
+            },
+          },
+          data: {
+            status: isCompleted ? "completed" : "reading",
+            progressPercentage: input.progressPercentage,
+            startedAt: existing.startedAt ?? now,
+            completedAt: isCompleted ? (existing.completedAt ?? now) : null,
+            lastReadAt: now,
+          },
+          select: readingProgressSelect,
+        });
+      }
+
+      return await prisma.readingProgress.create({
+        data: {
+          userId: ctx.session.user.id,
+          paperId: input.paperId,
+          status: isCompleted ? "completed" : "reading",
+          progressPercentage: input.progressPercentage,
+          startedAt: now,
+          completedAt: isCompleted ? now : null,
+          lastReadAt: now,
+        },
+        select: readingProgressSelect,
+      });
+    }),
+    complete: protectedProcedure.input(paperIdInputSchema).mutation(async ({ ctx, input }) => {
+      await ensurePublishedPaper(input.paperId);
+
+      const now = new Date();
+      const existing = await prisma.readingProgress.findUnique({
+        where: {
+          userId_paperId: {
+            userId: ctx.session.user.id,
+            paperId: input.paperId,
+          },
+        },
+        select: readingProgressSelect,
+      });
+
+      if (existing) {
+        return await prisma.readingProgress.update({
+          where: {
+            userId_paperId: {
+              userId: ctx.session.user.id,
+              paperId: input.paperId,
+            },
+          },
+          data: {
+            status: "completed",
+            progressPercentage: 100,
+            startedAt: existing.startedAt ?? now,
+            completedAt: existing.completedAt ?? now,
+            lastReadAt: now,
+          },
+          select: readingProgressSelect,
+        });
+      }
+
+      return await prisma.readingProgress.create({
+        data: {
+          userId: ctx.session.user.id,
+          paperId: input.paperId,
+          status: "completed",
+          progressPercentage: 100,
+          startedAt: now,
+          completedAt: now,
+          lastReadAt: now,
+        },
+        select: readingProgressSelect,
+      });
+    }),
+    getForPaper: protectedProcedure.input(paperIdInputSchema).query(async ({ ctx, input }) => {
+      return await prisma.readingProgress.findUnique({
+        where: {
+          userId_paperId: {
+            userId: ctx.session.user.id,
+            paperId: input.paperId,
+          },
+        },
+        select: readingProgressSelect,
+      });
+    }),
+  }),
+  bookmark: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const bookmarks = await prisma.bookmark.findMany({
+        where: {
+          userId: ctx.session.user.id,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: bookmarkSelect,
+      });
+
+      return bookmarks.map(mapBookmark);
+    }),
+    add: protectedProcedure.input(paperIdInputSchema).mutation(async ({ ctx, input }) => {
+      await ensurePublishedPaper(input.paperId);
+
+      const bookmark = await prisma.bookmark.upsert({
+        where: {
+          userId_paperId: {
+            userId: ctx.session.user.id,
+            paperId: input.paperId,
+          },
+        },
+        update: {},
+        create: {
+          userId: ctx.session.user.id,
+          paperId: input.paperId,
+        },
+        select: bookmarkSelect,
+      });
+
+      return mapBookmark(bookmark);
+    }),
+    remove: protectedProcedure.input(paperIdInputSchema).mutation(async ({ ctx, input }) => {
+      const result = await prisma.bookmark.deleteMany({
+        where: {
+          userId: ctx.session.user.id,
+          paperId: input.paperId,
+        },
+      });
+
+      return {
+        success: true,
+        removed: result.count > 0,
+      };
+    }),
+    getForPaper: protectedProcedure.input(paperIdInputSchema).query(async ({ ctx, input }) => {
+      const bookmark = await prisma.bookmark.findUnique({
+        where: {
+          userId_paperId: {
+            userId: ctx.session.user.id,
+            paperId: input.paperId,
+          },
+        },
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      });
+
+      return {
+        isBookmarked: Boolean(bookmark),
+        bookmark,
+      };
+    }),
+  }),
+  notes: router({
+    listForPaper: protectedProcedure.input(paperIdInputSchema).query(async ({ ctx, input }) => {
+      await ensurePaperExists(input.paperId);
+
+      return await prisma.readingNote.findMany({
+        where: {
+          userId: ctx.session.user.id,
+          paperId: input.paperId,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: readingNoteSelect,
+      });
+    }),
+    create: protectedProcedure.input(createNoteInputSchema).mutation(async ({ ctx, input }) => {
+      await ensurePublishedPaper(input.paperId);
+
+      return await prisma.readingNote.create({
+        data: {
+          userId: ctx.session.user.id,
+          paperId: input.paperId,
+          note: input.note,
+          section: input.section || null,
+        },
+        select: readingNoteSelect,
+      });
+    }),
+    update: protectedProcedure.input(updateNoteInputSchema).mutation(async ({ ctx, input }) => {
+      await requireOwnedNote(input.noteId, ctx.session.user.id);
+
+      return await prisma.readingNote.update({
+        where: {
+          id: input.noteId,
+        },
+        data: {
+          note: input.note,
+          ...(input.section !== undefined ? { section: input.section || null } : {}),
+        },
+        select: readingNoteSelect,
+      });
+    }),
+    delete: protectedProcedure.input(noteIdInputSchema).mutation(async ({ ctx, input }) => {
+      await requireOwnedNote(input.noteId, ctx.session.user.id);
+
+      await prisma.readingNote.delete({
+        where: {
+          id: input.noteId,
+        },
+      });
+
+      return {
+        success: true,
+      };
+    }),
   }),
   admin: router({
     ingestion: router({

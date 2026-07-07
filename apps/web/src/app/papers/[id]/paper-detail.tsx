@@ -8,7 +8,11 @@ import { AlertCircle, ArrowLeft, BookOpen, Clock, ExternalLink, FileText } from 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
+import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
+
+import PaperActions from "./paper-actions";
+import PaperNotes from "./paper-notes";
 
 type PaperDetailProps = {
   id: string;
@@ -34,6 +38,7 @@ function getDifficultyClass(value: string | undefined) {
 }
 
 export default function PaperDetail({ id }: PaperDetailProps) {
+  const session = authClient.useSession();
   const paper = useQuery(trpc.papers.detail.queryOptions({ id }));
 
   if (paper.isLoading) {
@@ -125,6 +130,14 @@ export default function PaperDetail({ id }: PaperDetailProps) {
           </CardContent>
         </Card>
 
+        <PaperActions
+          isAuthenticated={Boolean(session.data?.user)}
+          isAuthPending={session.isPending}
+          isBookmarked={paper.data.isBookmarked}
+          paperId={paper.data.id}
+          userProgress={paper.data.userProgress}
+        />
+
         {classification ? (
           <Card className="rounded-lg border-border/80 shadow-sm">
             <CardHeader>
@@ -214,6 +227,12 @@ export default function PaperDetail({ id }: PaperDetailProps) {
             </div>
           </CardContent>
         </Card>
+
+        <PaperNotes
+          isAuthenticated={Boolean(session.data?.user)}
+          isAuthPending={session.isPending}
+          paperId={paper.data.id}
+        />
       </article>
     </main>
   );

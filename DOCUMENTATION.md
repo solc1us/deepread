@@ -821,3 +821,61 @@ Jumlah user yang mulai membaca paper setelah melihat difficulty level dan beginn
 | Apakah user bisa memberi feedback difficulty?             | Masuk future scope                                      |
 | Apakah admin boleh override classification?               | MVP: cukup rerun/config, bukan review manual            |
 | Apakah reading time dihitung manual atau otomatis?        | MVP: estimated reading time + optional session tracking |
+
+## Current Implementation Status
+
+Completed:
+
+- Phase 1–2: Project setup, database schema, paper library, paper detail.
+- Phase 3: OpenAlex ingestion, deduplication, ingestion logs, admin ingestion endpoint.
+- Phase 3.5: Minimal admin auth with Better Auth and admin guard.
+- Phase 4: Rule-based classifier, classification service, admin classification endpoints.
+
+In Progress:
+
+- Phase 5: Reading progress, bookmark, notes, reading mode.
+
+Deferred:
+
+- Redis/BullMQ worker.
+- Scheduler/cron.
+- PDF parsing.
+- Unpaywall/Crossref integration.
+- Admin dashboard UI.
+
+## Current API Style
+
+The current implementation uses tRPC procedures, not REST endpoints.
+
+Existing important procedures:
+
+- admin.ingestion.runOpenAlex
+- admin.ingestion.logs
+- admin.classification.runForPaper
+- admin.classification.runBatch
+- admin.classification.preview, if implemented
+
+Planned Phase 5 procedures:
+
+- reading.start
+- reading.updateProgress
+- reading.complete
+- reading.getForPaper
+- bookmark.list
+- bookmark.add
+- bookmark.remove
+- bookmark.getForPaper
+
+## MVP Technical Decisions
+
+For current MVP:
+
+- Use manual admin-triggered ingestion, not scheduler.
+- Use tRPC procedures, not REST controllers.
+- Use OpenAlex only for initial ingestion.
+- Use metadata-only classification.
+- Do not parse PDF files.
+- Do not store PDF files locally.
+- Do not use Redis/BullMQ yet.
+- Do not implement background workers yet.
+- Do not use external AI/LLM APIs.
