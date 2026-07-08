@@ -195,7 +195,7 @@ export default function PapersList({ initialFilters }: PapersListProps) {
         </div>
       </section>
 
-      <form className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm md:grid-cols-[1fr_220px_180px_150px_auto]">
+      <form className="grid gap-3 rounded-lg border bg-card p-4 shadow-sm md:grid-cols-[1fr_220px_180px_150px_auto]">
         <label className="grid gap-1 text-xs font-medium text-muted-foreground">
           Search
           <div className="relative">

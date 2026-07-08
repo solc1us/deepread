@@ -110,7 +110,7 @@ export default function NotesOverview() {
 
   if (groupedNotes.isLoading) {
     return (
-      <main className="mx-auto grid w-full max-w-5xl gap-7 px-4 py-8">
+      <main className="mx-auto grid w-full max-w-6xl gap-7 px-4 py-8">
         <div className="grid gap-2">
           <Skeleton className="h-8 w-36 rounded-md" />
           <Skeleton className="h-4 w-80 rounded-md" />
@@ -151,7 +151,7 @@ export default function NotesOverview() {
   ] as const;
 
   return (
-    <main className="mx-auto grid w-full max-w-5xl gap-8 px-4 py-8 md:py-10">
+    <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 md:py-10">
       <section className="grid gap-2 border-b pb-6">
         <p className="text-sm font-medium text-primary">Reading Notes</p>
         <h1 className="text-3xl font-semibold tracking-normal">Notes</h1>
@@ -171,7 +171,7 @@ export default function NotesOverview() {
                   <span className="text-xs text-muted-foreground">{item.label}</span>
                   <span className="text-lg font-semibold">{item.value}</span>
                 </div>
-                <Icon className="text-primary" />
+                <Icon aria-hidden="true" className="text-primary" />
               </CardContent>
             </Card>
           );
@@ -186,10 +186,23 @@ export default function NotesOverview() {
         {paperGroups.length ? (
           <div className="grid gap-5">
             {paperGroups.map((group) => (
-              <Card className="rounded-lg border-border/80 shadow-sm" key={group.paper.id}>
-                <CardHeader className="gap-3">
+              <Card className="gap-0 border-border/80 py-0 shadow-sm" key={group.paper.id}>
+                <CardHeader className="gap-4 border-b bg-muted/20 px-5 py-5 sm:px-6">
+                  <div className="grid gap-1.5">
+                    <CardTitle className="text-lg leading-7 sm:text-xl">
+                      <Link
+                        className="break-words transition-colors hover:text-primary"
+                        href={`/papers/${group.paper.id}`}
+                      >
+                        {group.paper.title}
+                      </Link>
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Latest update {formatDate(group.latestUpdatedAt)}
+                    </p>
+                  </div>
                   <div className="flex flex-wrap gap-2 text-xs font-medium">
-                    <span className="rounded-md border bg-background px-2.5 py-1">{group.paper.category.name}</span>
+                    <span className="rounded-md border bg-card px-2.5 py-1">{group.paper.category.name}</span>
                     <span
                       className={cn(
                         "rounded-md px-2.5 py-1 capitalize",
@@ -200,35 +213,35 @@ export default function NotesOverview() {
                     </span>
                     {group.paper.classification ? (
                       <>
-                        <span className="rounded-md border bg-background px-2.5 py-1">
+                        <span className="rounded-md border bg-card px-2.5 py-1">
                           Score {group.paper.classification.beginnerScore}/100
                         </span>
-                        <span className="rounded-md border bg-background px-2.5 py-1">
+                        <span className="rounded-md border bg-card px-2.5 py-1">
                           {group.paper.classification.estimatedReadingTime} min read
                         </span>
                       </>
                     ) : null}
-                    <span className="rounded-md border bg-background px-2.5 py-1">
+                    <span className="rounded-md border bg-card px-2.5 py-1">
                       {group.noteCount} {group.noteCount === 1 ? "note" : "notes"}
                     </span>
                   </div>
-                  <CardTitle className="text-lg leading-7">
-                    <Link className="hover:text-primary" href={`/papers/${group.paper.id}`}>
-                      {group.paper.title}
-                    </Link>
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">Latest update {formatDate(group.latestUpdatedAt)}</p>
                 </CardHeader>
 
-                <CardContent>
-                  <div className="divide-y divide-border">
+                <CardContent className="px-5 py-5 sm:px-6">
+                  <div className="grid gap-3">
                     {group.notes.map((item) => {
                       const isEditing = editingId === item.id;
                       const isConfirmingDelete = confirmingDeleteId === item.id;
                       const isDeletingThisNote = deleteNote.isPending && deleteNote.variables?.noteId === item.id;
 
                       return (
-                        <article className="grid gap-3 py-5 first:pt-0 last:pb-0" key={item.id}>
+                        <article
+                          className={cn(
+                            "grid gap-4 rounded-md border border-border/80 bg-background p-4 sm:p-5",
+                            isEditing && "border-primary/40 bg-primary/5",
+                          )}
+                          key={item.id}
+                        >
                           {isEditing ? (
                             <div className="grid gap-3">
                               <label className="grid gap-1 text-xs font-medium text-muted-foreground">
@@ -284,18 +297,27 @@ export default function NotesOverview() {
                             </div>
                           ) : (
                             <>
-                              <div className="grid gap-2">
-                                {item.section ? <p className="text-xs font-medium text-primary">{item.section}</p> : null}
+                              <div className="grid gap-3">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  {item.section ? (
+                                    <p className="rounded-sm bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                                      {item.section}
+                                    </p>
+                                  ) : (
+                                    <span className="text-xs font-medium text-muted-foreground">General note</span>
+                                  )}
+                                  <p className="text-xs text-muted-foreground">
+                                    {item.updatedAt !== item.createdAt
+                                      ? `Updated ${formatDate(item.updatedAt)}`
+                                      : `Created ${formatDate(item.createdAt)}`}
+                                  </p>
+                                </div>
                                 <p className="break-words whitespace-pre-wrap text-sm leading-7 text-foreground">
                                   {item.note}
                                 </p>
-                                <p className="text-xs text-muted-foreground">
-                                  Created {formatDate(item.createdAt)}
-                                  {item.updatedAt !== item.createdAt ? ` - Updated ${formatDate(item.updatedAt)}` : ""}
-                                </p>
                               </div>
 
-                              <div className="flex flex-wrap justify-end gap-2">
+                              <div className="flex flex-wrap justify-end gap-2 border-t pt-3">
                                 {isConfirmingDelete ? (
                                   <>
                                     <Button
@@ -352,7 +374,7 @@ export default function NotesOverview() {
                   </div>
                 </CardContent>
 
-                <CardFooter className="flex-wrap gap-2">
+                <CardFooter className="flex-wrap gap-2 bg-muted/20 px-5 py-4 sm:px-6">
                   <Button nativeButton={false} render={<Link href={`/papers/${group.paper.id}`} />} variant="outline">
                     <FileText data-icon="inline-start" />
                     View Paper
