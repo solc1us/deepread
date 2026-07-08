@@ -56,9 +56,10 @@ const noteIdInputSchema = z.object({
   noteId: z.string().uuid(),
 });
 
+type ReadingStatusValue = "not_started" | "reading" | "completed";
+
 const readingProgressSelect = {
   id: true,
-  userId: true,
   paperId: true,
   status: true,
   progressPercentage: true,
@@ -71,7 +72,6 @@ const readingProgressSelect = {
 
 const bookmarkSelect = {
   id: true,
-  userId: true,
   paperId: true,
   createdAt: true,
   paper: {
@@ -103,7 +103,6 @@ const bookmarkSelect = {
 
 const readingNoteSelect = {
   id: true,
-  userId: true,
   paperId: true,
   note: true,
   section: true,
@@ -208,7 +207,6 @@ async function requireOwnedNote(noteId: string, userId: string) {
 
 function mapBookmark(bookmark: {
   id: string;
-  userId: string;
   paperId: string;
   createdAt: Date;
   paper: {
@@ -233,7 +231,6 @@ function mapBookmark(bookmark: {
 }) {
   return {
     id: bookmark.id,
-    userId: bookmark.userId,
     paperId: bookmark.paperId,
     createdAt: bookmark.createdAt,
     paper: {
@@ -288,7 +285,7 @@ export const appRouter = router({
         }),
       )
       .query(async ({ ctx, input }) => {
-        const currentUserId = ctx.session?.user.id ?? "__guest__";
+        const sessionUserId = ctx.session?.user.id ?? null;
         const where = {
           status: "published" as const,
           ...(input.categoryId ? { categoryId: input.categoryId } : {}),
@@ -360,31 +357,56 @@ export const appRouter = router({
                   estimatedReadingTime: true,
                 },
               },
-              readingProgress: {
-                where: {
-                  userId: currentUserId,
-                },
-                take: 1,
-                select: {
-                  status: true,
-                  progressPercentage: true,
-                },
-              },
-              bookmarks: {
-                where: {
-                  userId: currentUserId,
-                },
-                take: 1,
-                select: {
-                  id: true,
-                },
-              },
             },
           }),
           prisma.paper.count({
             where,
           }),
         ]);
+
+        const progressByPaperId = new Map<string, { status: ReadingStatusValue; progressPercentage: number }>();
+        const bookmarkedPaperIds = new Set<string>();
+
+        if (sessionUserId && papers.length > 0) {
+          const paperIds = papers.map((paper) => paper.id);
+          const [readingProgress, bookmarks] = await Promise.all([
+            prisma.readingProgress.findMany({
+              where: {
+                userId: sessionUserId,
+                paperId: {
+                  in: paperIds,
+                },
+              },
+              select: {
+                paperId: true,
+                status: true,
+                progressPercentage: true,
+              },
+            }),
+            prisma.bookmark.findMany({
+              where: {
+                userId: sessionUserId,
+                paperId: {
+                  in: paperIds,
+                },
+              },
+              select: {
+                paperId: true,
+              },
+            }),
+          ]);
+
+          for (const progress of readingProgress) {
+            progressByPaperId.set(progress.paperId, {
+              status: progress.status as ReadingStatusValue,
+              progressPercentage: progress.progressPercentage,
+            });
+          }
+
+          for (const bookmark of bookmarks) {
+            bookmarkedPaperIds.add(bookmark.paperId);
+          }
+        }
 
         return {
           papers: papers.map((paper) => ({
@@ -399,8 +421,8 @@ export const appRouter = router({
             difficultyLevel: paper.classification?.difficultyLevel ?? null,
             beginnerScore: paper.classification?.beginnerScore ?? null,
             estimatedReadingTime: paper.classification?.estimatedReadingTime ?? null,
-            userProgress: paper.readingProgress[0] ?? null,
-            isBookmarked: paper.bookmarks.length > 0,
+            userProgress: progressByPaperId.get(paper.id) ?? null,
+            isBookmarked: bookmarkedPaperIds.has(paper.id),
           })),
           pagination: {
             page: input.page,
@@ -417,7 +439,7 @@ export const appRouter = router({
         }),
       )
       .query(async ({ ctx, input }) => {
-        const currentUserId = ctx.session?.user.id ?? "__guest__";
+        const sessionUserId = ctx.session?.user.id ?? null;
         const paper = await prisma.paper.findFirst({
           where: {
             id: input.id,
@@ -451,28 +473,6 @@ export const appRouter = router({
                 recommendedReader: true,
               },
             },
-            readingProgress: {
-              where: {
-                userId: currentUserId,
-              },
-              take: 1,
-              select: {
-                status: true,
-                progressPercentage: true,
-                startedAt: true,
-                completedAt: true,
-                lastReadAt: true,
-              },
-            },
-            bookmarks: {
-              where: {
-                userId: currentUserId,
-              },
-              take: 1,
-              select: {
-                id: true,
-              },
-            },
           },
         });
 
@@ -481,6 +481,54 @@ export const appRouter = router({
             code: "NOT_FOUND",
             message: "Paper not found",
           });
+        }
+
+        let userProgress: {
+          status: ReadingStatusValue;
+          progressPercentage: number;
+          startedAt: Date | null;
+          completedAt: Date | null;
+          lastReadAt: Date | null;
+        } | null = null;
+        let isBookmarked = false;
+
+        if (sessionUserId) {
+          const [readingProgress, bookmark] = await Promise.all([
+            prisma.readingProgress.findUnique({
+              where: {
+                userId_paperId: {
+                  userId: sessionUserId,
+                  paperId: paper.id,
+                },
+              },
+              select: {
+                status: true,
+                progressPercentage: true,
+                startedAt: true,
+                completedAt: true,
+                lastReadAt: true,
+              },
+            }),
+            prisma.bookmark.findUnique({
+              where: {
+                userId_paperId: {
+                  userId: sessionUserId,
+                  paperId: paper.id,
+                },
+              },
+              select: {
+                id: true,
+              },
+            }),
+          ]);
+
+          userProgress = readingProgress
+            ? {
+                ...readingProgress,
+                status: readingProgress.status as ReadingStatusValue,
+              }
+            : null;
+          isBookmarked = Boolean(bookmark);
         }
 
         return {
@@ -497,8 +545,8 @@ export const appRouter = router({
           language: paper.language,
           category: paper.category,
           classification: paper.classification,
-          userProgress: paper.readingProgress[0] ?? null,
-          isBookmarked: paper.bookmarks.length > 0,
+          userProgress,
+          isBookmarked,
         };
       }),
   }),
@@ -940,6 +988,7 @@ export const appRouter = router({
       return await prisma.readingNote.update({
         where: {
           id: input.noteId,
+          userId: ctx.session.user.id,
         },
         data: {
           note: input.note,
@@ -954,6 +1003,7 @@ export const appRouter = router({
       await prisma.readingNote.delete({
         where: {
           id: input.noteId,
+          userId: ctx.session.user.id,
         },
       });
 

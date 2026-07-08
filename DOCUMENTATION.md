@@ -805,7 +805,7 @@ Jumlah user yang mulai membaca paper setelah melihat difficulty level dan beginn
 | Phase 3.5 | Admin auth, admin guard, and secure admin access                       | Completed |
 | Phase 4   | Rule-based difficulty classifier and admin classification tools        | Completed |
 | Phase 5   | Reading mode, progress, bookmarks, notes, profile, and UI polish       | Completed |
-| Phase 6   | Access control audit and user-private data security cleanup            | Planned   |
+| Phase 6   | Access control audit and user-private data security cleanup            | Completed |
 | Phase 7   | Reading statistics and reading habit insights                          | Planned   |
 | Phase 8   | Admin monitoring dashboard and pipeline controls                       | Planned   |
 | Phase 9   | Data expansion, query refinement, and data cleanup                     | Planned   |
