@@ -224,7 +224,7 @@ export default function ProfileOverview() {
             ))}
           </div>
         ) : (
-          <EmptySection message="No active reading progress yet." />
+          <EmptySection message="No active reading yet. Start a paper from the library to track progress." />
         )}
       </section>
 
@@ -249,7 +249,7 @@ export default function ProfileOverview() {
             ))}
           </div>
         ) : (
-          <EmptySection message="No bookmarks yet." />
+          <EmptySection message="No bookmarks yet. Save papers from the library to find them here." />
         )}
       </section>
 
@@ -273,7 +273,7 @@ export default function ProfileOverview() {
             ))}
           </div>
         ) : (
-          <EmptySection message="No completed papers yet." />
+          <EmptySection message="No completed papers yet. Mark a reading as completed when you finish." />
         )}
       </section>
     </main>

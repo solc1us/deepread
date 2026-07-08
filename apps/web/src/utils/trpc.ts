@@ -46,3 +46,17 @@ export const trpc = createTRPCOptionsProxy<AppRouter>({
   client: trpcClient,
   queryClient,
 });
+
+export async function markProfileOverviewStale() {
+  await queryClient.invalidateQueries({
+    queryKey: trpc.profile.getOverview.queryKey(),
+    refetchType: "none",
+  });
+}
+
+export async function markNotesOverviewStale() {
+  await queryClient.invalidateQueries({
+    queryKey: trpc.notes.listMineGroupedByPaper.queryKey(),
+    refetchType: "none",
+  });
+}

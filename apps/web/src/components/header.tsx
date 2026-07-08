@@ -16,11 +16,16 @@ const publicLinks = [
 
 const userLinks = [
   { to: "/papers", label: "Papers" },
+  { to: "/notes", label: "Notes" },
   { to: "/profile", label: "Profile" },
 ] as const;
 
-// No admin page exists yet, so admins only receive working reader destinations.
-const adminLinks = userLinks;
+const adminLinks = [
+  { to: "/papers", label: "Papers" },
+  { to: "/dashboard", label: "Admin" },
+  { to: "/notes", label: "Notes" },
+  { to: "/profile", label: "Profile" },
+] as const;
 
 export default function Header() {
   const pathname = usePathname();

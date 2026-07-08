@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { queryClient, trpc } from "@/utils/trpc";
+import { markNotesOverviewStale, markProfileOverviewStale, queryClient, trpc } from "@/utils/trpc";
 
 type PaperNotesProps = {
   paperId: string;
@@ -33,7 +33,10 @@ export default function PaperNotes({ paperId, isAuthenticated, isAuthPending }: 
     enabled: isAuthenticated,
   });
   const refreshNotes = async () => {
-    await queryClient.invalidateQueries({ queryKey: trpc.notes.listForPaper.queryKey({ paperId }) });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: trpc.notes.listForPaper.queryKey({ paperId }) }),
+      markNotesOverviewStale(),
+    ]);
   };
 
   const createNote = useMutation(
@@ -41,7 +44,7 @@ export default function PaperNotes({ paperId, isAuthenticated, isAuthPending }: 
       onSuccess: async () => {
         setNote("");
         setSection("");
-        await refreshNotes();
+        await Promise.all([refreshNotes(), markProfileOverviewStale()]);
         toast.success("Note added");
       },
       onError: (error) => toast.error(error.message),
@@ -62,7 +65,7 @@ export default function PaperNotes({ paperId, isAuthenticated, isAuthPending }: 
   const deleteNote = useMutation(
     trpc.notes.delete.mutationOptions({
       onSuccess: async () => {
-        await refreshNotes();
+        await Promise.all([refreshNotes(), markProfileOverviewStale()]);
         toast.success("Note deleted");
       },
       onError: (error) => toast.error(error.message),

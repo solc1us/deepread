@@ -22,7 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
-import { queryClient, trpc } from "@/utils/trpc";
+import { markProfileOverviewStale, queryClient, trpc } from "@/utils/trpc";
 
 type ReadingModeProps = {
   paperId: string;
@@ -78,6 +78,7 @@ export default function ReadingMode({ paperId }: ReadingModeProps) {
         queryKey: trpc.papers.list.queryKey(),
         refetchType: "none",
       }),
+      markProfileOverviewStale(),
     ]);
   };
 

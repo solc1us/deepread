@@ -27,8 +27,9 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
           password: value.password,
         },
         {
-          onSuccess: () => {
-            router.push("/profile" as Route);
+          onSuccess: (context) => {
+            const destination = context.data.user.role === "admin" ? "/dashboard" : "/profile";
+            router.push(destination as Route);
             toast.success("Sign in successful");
           },
           onError: (error) => {

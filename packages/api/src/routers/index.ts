@@ -828,6 +828,85 @@ export const appRouter = router({
     }),
   }),
   notes: router({
+    listMineGroupedByPaper: protectedProcedure.query(async ({ ctx }) => {
+      const notes = await prisma.readingNote.findMany({
+        where: {
+          userId: ctx.session.user.id,
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+        select: {
+          id: true,
+          note: true,
+          section: true,
+          createdAt: true,
+          updatedAt: true,
+          paper: {
+            select: {
+              id: true,
+              title: true,
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+              classification: {
+                select: {
+                  difficultyLevel: true,
+                  beginnerScore: true,
+                  estimatedReadingTime: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const paperGroups = new Map<
+        string,
+        {
+          paper: (typeof notes)[number]["paper"];
+          noteCount: number;
+          latestUpdatedAt: string;
+          notes: Array<{
+            id: string;
+            note: string;
+            section: string | null;
+            createdAt: string;
+            updatedAt: string;
+          }>;
+        }
+      >();
+
+      for (const note of notes) {
+        let group = paperGroups.get(note.paper.id);
+
+        if (!group) {
+          group = {
+            paper: note.paper,
+            noteCount: 0,
+            latestUpdatedAt: note.updatedAt.toISOString(),
+            notes: [],
+          };
+          paperGroups.set(note.paper.id, group);
+        }
+
+        group.noteCount += 1;
+        group.notes.push({
+          id: note.id,
+          note: note.note,
+          section: note.section,
+          createdAt: note.createdAt.toISOString(),
+          updatedAt: note.updatedAt.toISOString(),
+        });
+      }
+
+      return {
+        papers: Array.from(paperGroups.values()),
+      };
+    }),
     listForPaper: protectedProcedure.input(paperIdInputSchema).query(async ({ ctx, input }) => {
       await ensurePaperExists(input.paperId);
 

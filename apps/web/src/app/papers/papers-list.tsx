@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
-import { queryClient, trpc } from "@/utils/trpc";
+import { markProfileOverviewStale, queryClient, trpc } from "@/utils/trpc";
 
 const difficulties = [
   { value: "", label: "All difficulties" },
@@ -135,7 +135,10 @@ export default function PapersList({ initialFilters }: PapersListProps) {
     }),
   );
   const refreshPapers = async () => {
-    await queryClient.invalidateQueries({ queryKey: trpc.papers.list.queryKey() });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: trpc.papers.list.queryKey() }),
+      markProfileOverviewStale(),
+    ]);
   };
   const addBookmark = useMutation(
     trpc.bookmark.add.mutationOptions({

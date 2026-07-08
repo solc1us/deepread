@@ -51,9 +51,6 @@ export default function Home() {
             <Button className="rounded-md" nativeButton={false} render={<Link href="/papers" />}>
               Browse papers
             </Button>
-            <Button className="rounded-md" nativeButton={false} variant="outline" render={<Link href="/dashboard" />}>
-              Dashboard
-            </Button>
           </div>
         </div>
 

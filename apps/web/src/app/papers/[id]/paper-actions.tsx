@@ -8,7 +8,7 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { queryClient, trpc } from "@/utils/trpc";
+import { markProfileOverviewStale, queryClient, trpc } from "@/utils/trpc";
 
 type PaperActionsProps = {
   paperId: string;
@@ -44,6 +44,7 @@ export default function PaperActions({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: trpc.papers.detail.queryKey({ id: paperId }) }),
       queryClient.invalidateQueries({ queryKey: trpc.papers.list.queryKey() }),
+      markProfileOverviewStale(),
     ]);
   };
 
