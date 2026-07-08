@@ -797,16 +797,19 @@ Jumlah user yang mulai membaca paper setelah melihat difficulty level dan beginn
 
 # 13. MVP Roadmap
 
-| Phase   | Scope                                                        |
-| ------- | ------------------------------------------------------------ |
-| Phase 1 | Setup project, database, auth, user/admin role               |
-| Phase 2 | Paper schema, paper library, search, filter, paper detail    |
-| Phase 3 | Automated ingestion from OpenAlex and open-access validation |
-| Phase 4 | Rule-based difficulty classifier                             |
-| Phase 5 | Reading mode, progress, bookmark, notes                      |
-| Phase 6 | Reading statistics                                           |
-| Phase 7 | Admin monitoring dashboard                                   |
-| Phase 8 | Testing, data cleanup, deployment                            |
+| Phase     | Scope                                                                  | Status    |
+| --------- | ---------------------------------------------------------------------- | --------- |
+| Phase 1   | Project setup, database, auth, and user/admin role                     | Completed |
+| Phase 2   | Paper schema, library, search/filter/sort, and detail page             | Completed |
+| Phase 3   | OpenAlex ingestion, normalization, deduplication, and logs             | Completed |
+| Phase 3.5 | Admin auth, admin guard, and secure admin access                       | Completed |
+| Phase 4   | Rule-based difficulty classifier and admin classification tools        | Completed |
+| Phase 5   | Reading mode, progress, bookmarks, notes, profile, and UI polish       | Completed |
+| Phase 6   | Access control audit and user-private data security cleanup            | Planned   |
+| Phase 7   | Reading statistics and reading habit insights                          | Planned   |
+| Phase 8   | Admin monitoring dashboard and pipeline controls                       | Planned   |
+| Phase 9   | Data expansion, query refinement, and data cleanup                     | Planned   |
+| Phase 10  | Final testing, performance check, deployment, and documentation update | Planned   |
 
 ---
 
