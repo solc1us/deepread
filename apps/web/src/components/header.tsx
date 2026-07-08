@@ -16,15 +16,17 @@ const publicLinks = [
 
 const userLinks = [
   { to: "/papers", label: "Papers" },
-  { to: "/notes", label: "Notes" },
   { to: "/profile", label: "Profile" },
+  { to: "/notes", label: "Notes" },
+  { to: "/statistics", label: "Statistics" },
 ] as const;
 
 const adminLinks = [
   { to: "/papers", label: "Papers" },
   { to: "/dashboard", label: "Admin" },
-  { to: "/notes", label: "Notes" },
   { to: "/profile", label: "Profile" },
+  { to: "/notes", label: "Notes" },
+  { to: "/statistics", label: "Statistics" },
 ] as const;
 
 export default function Header() {
@@ -66,7 +68,7 @@ export default function Header() {
           <UserMenu isPending={isPending} session={session} />
         </div>
         <nav
-          className="order-3 flex min-h-9 w-full gap-1 border-t pt-2 text-sm sm:hidden"
+          className="order-3 flex min-h-9 w-full flex-wrap gap-1 border-t pt-2 text-sm sm:hidden"
           aria-label="Mobile navigation"
         >
           {links.map(({ to, label }) => {

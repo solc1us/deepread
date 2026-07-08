@@ -9,6 +9,7 @@ import { papersRouter } from "./papers";
 import { privateDataProcedure } from "./private-data";
 import { profileRouter } from "./profile";
 import { readingRouter } from "./reading";
+import { statisticsRouter } from "./statistics";
 
 export const appRouter = router({
   healthCheck: healthCheckProcedure,
@@ -18,6 +19,7 @@ export const appRouter = router({
   reading: readingRouter,
   bookmark: bookmarkRouter,
   notes: notesRouter,
+  statistics: statisticsRouter,
   admin: adminRouter,
   privateData: privateDataProcedure,
 });

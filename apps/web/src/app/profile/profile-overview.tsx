@@ -5,7 +5,8 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@deepread/
 import { Skeleton } from "@deepread/ui/components/skeleton";
 import { cn } from "@deepread/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Bookmark, BookOpen, CheckCircle2, Clock, FileText, StickyNote } from "lucide-react";
+import { AlertCircle, BarChart3, Bookmark, BookOpen, CheckCircle2, Clock, FileText, StickyNote } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 
 import { trpc } from "@/utils/trpc";
@@ -178,7 +179,13 @@ export default function ProfileOverview() {
           <h1 className="text-3xl font-semibold tracking-normal">{user.name}</h1>
           <p className="text-sm text-muted-foreground">{user.email}</p>
         </div>
-        <span className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium capitalize">{user.role}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button nativeButton={false} render={<Link href={"/statistics" as Route} />} variant="outline">
+            <BarChart3 data-icon="inline-start" />
+            View Statistics
+          </Button>
+          <span className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium capitalize">{user.role}</span>
+        </div>
       </section>
 
       <section aria-labelledby="reading-summary-heading" className="grid gap-4">
