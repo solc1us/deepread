@@ -22,7 +22,7 @@ Core MVP:
 - notes
 - profile
 - reading statistics
-- admin monitoring later
+- admin monitoring dashboard
 
 ---
 
@@ -57,14 +57,14 @@ Completed:
 - Phase 3: OpenAlex ingestion, normalization, dedupe, logs
 - Phase 3.5: admin auth, admin guard, removed `x-admin-secret`
 - Phase 4: rule-based classifier, classification service, admin classification tools
-- Phase 5: reading mode, progress, bookmarks, notes, grouped notes, profile, role-aware navbar, UI polish
+- Phase 5: reading mode, progress, bookmarks, notes, grouped notes, profile, role-aware sidebar/navbar, UI polish
 - Phase 6: application-layer access control audit
 - Phase 6.5: tRPC routers split by feature
 - Phase 7: user reading statistics dashboard
+- Phase 8: admin monitoring dashboard, admin sidebar, pipeline controls, logs table, papers monitor, DB health status
 
 Planned:
 
-- Phase 8: admin monitoring dashboard and pipeline controls
 - Phase 8.5: classifier evaluation/calibration
 - Phase 9: data expansion and cleanup
 - Phase 10: final testing, hardening, deployment, docs update
@@ -97,8 +97,18 @@ Authenticated user:
 
 Admin:
 
-- only show/use admin links if actual route exists and works
-- Phase 8 will add/admin-polish admin monitoring dashboard
+- `/admin`
+- `/admin/pipeline`
+- `/admin/logs`
+- `/admin/classification`
+- `/admin/papers`
+
+Navigation behavior:
+
+- Guest users use public navbar.
+- Logged-in normal users use user sidebar.
+- Logged-in admin users use admin sidebar.
+- Authenticated users should keep their sidebar even when visiting public-capable routes like `/papers`.
 
 ---
 
@@ -106,8 +116,12 @@ Admin:
 
 Admin:
 
+- `admin.dashboard.getOverview`
 - `admin.ingestion.runOpenAlex`
 - `admin.ingestion.logs`
+- `admin.ingestion.getQueryPresets`
+- `admin.logs.list`
+- `admin.papers.list`
 - `admin.classification.runForPaper`
 - `admin.classification.runBatch`
 - `admin.classification.preview` if implemented
@@ -144,12 +158,15 @@ Roles:
 Rules:
 
 - Guest can browse public paper pages only.
+- Guest cannot access reading mode, profile, notes, statistics, or admin pages.
 - Private user data must use `ctx.session.user.id` or project equivalent.
 - Never trust `userId` from client input.
 - Users can access only their own reading progress, bookmarks, notes, profile, and statistics.
 - Admin procedures must use existing admin guard.
+- Normal users cannot access `/admin/*`.
 - Do not use `x-admin-secret`.
 - Do not create a new auth system.
+- Do not enable RLS yet.
 
 ---
 
@@ -157,6 +174,7 @@ Rules:
 
 - Ingestion is manually admin-triggered for now.
 - OpenAlex is the only active ingestion source for now.
+- Admin ingestion query input uses curated presets.
 - Difficulty classification is metadata-only.
 - Do not parse/store PDFs.
 - Users read through external source/PDF links.
@@ -164,9 +182,9 @@ Rules:
 - Pause/save keeps status `reading`, saves progress, updates `last_read_at`.
 - Completed means status `completed`, progress `100`, set `completed_at`.
 - Statistics reading time is estimated, not real tracked duration.
+- Admin dashboard is monitoring/control UI only, not a worker/scheduler system.
 - No external AI/LLM APIs for classifier.
 - No new infrastructure unless requested.
-- Do not enable RLS yet.
 
 ---
 
@@ -184,12 +202,14 @@ Use calm academic reading interface:
 - no heavy glassmorphism
 - no flashy AI startup style
 
-Navbar:
+Navigation:
 
-- Guest: Home, Papers, Login/Register if route exists
-- User: Papers, Profile, Notes, Statistics, Logout
-- Admin: Papers, working admin links, optional user links, Logout
+- Guest: public navbar with Home, Papers, Login/Register if route exists
+- User: sidebar with Papers, Profile, Notes, Statistics, Logout
+- Admin: sidebar with Overview, Pipeline, Logs, Classification, Papers Monitor, optional User App group, Logout
 - Never show broken/no-access links.
+- Never show admin links to normal users.
+- Authenticated users should not lose sidebar when navigating to public-capable pages.
 
 ---
 

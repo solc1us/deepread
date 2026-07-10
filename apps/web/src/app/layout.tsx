@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
 import "../index.css";
-import Header from "@/components/header";
+import AppShell from "@/components/app-shell";
 import Providers from "@/components/providers";
 
 const inter = Inter({
@@ -24,10 +24,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} min-h-svh antialiased`}>
         <Providers>
-          <div className="grid min-h-svh grid-rows-[auto_1fr]">
-            <Header />
-            {children}
-          </div>
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>

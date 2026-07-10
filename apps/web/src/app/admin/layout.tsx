@@ -3,17 +3,7 @@ import { redirect } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 
-import ReadingMode from "./reading-mode";
-
-type ReadingModePageProps = {
-  params: Promise<{
-    id: string;
-  }>;
-};
-
-export default async function ReadingModePage({ params }: ReadingModePageProps) {
-  const { id } = await params;
-
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await authClient.getSession({
     fetchOptions: {
       headers: await headers(),
@@ -25,5 +15,9 @@ export default async function ReadingModePage({ params }: ReadingModePageProps) 
     redirect("/login");
   }
 
-  return <ReadingMode key={id} paperId={id} />;
+  if (session.user.role !== "admin") {
+    redirect("/papers");
+  }
+
+  return children;
 }

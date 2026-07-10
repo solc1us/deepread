@@ -16,10 +16,24 @@ const ingestionLogsInputSchema = z
   })
   .optional();
 
+const openAlexQueryPresets = [
+  { label: "Educational technology", query: "educational technology", recommendedCategory: "Technology" },
+  { label: "Machine learning", query: "machine learning", recommendedCategory: "Computer Science" },
+  { label: "Student learning", query: "student learning", recommendedCategory: "Education" },
+  { label: "Public health intervention", query: "public health intervention", recommendedCategory: "Health" },
+  { label: "Business education", query: "business education", recommendedCategory: "Business" },
+  { label: "Cognitive behavioral therapy", query: "cognitive behavioral therapy", recommendedCategory: "Psychology" },
+  { label: "Social inequality", query: "social inequality", recommendedCategory: "Social Science" },
+  { label: "Engineering education", query: "engineering education", recommendedCategory: "Engineering" },
+] as const;
+
 export const adminIngestionRouter = router({
   runOpenAlex: adminProcedure.input(adminIngestionInputSchema).mutation(async ({ input }) => {
     return await runOpenAlexIngestion(input);
   }),
+  getQueryPresets: adminProcedure.query(() => ({
+    presets: openAlexQueryPresets,
+  })),
   logs: adminProcedure.input(ingestionLogsInputSchema).query(async ({ input }) => {
     const logs = await prisma.ingestionLog.findMany({
       orderBy: {

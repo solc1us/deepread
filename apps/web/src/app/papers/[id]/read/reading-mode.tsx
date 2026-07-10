@@ -21,7 +21,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { authClient } from "@/lib/auth-client";
 import { markProfileOverviewStale, queryClient, trpc } from "@/utils/trpc";
 
 type ReadingModeProps = {
@@ -57,13 +56,8 @@ function formatStatus(status: string | undefined) {
 
 export default function ReadingMode({ paperId }: ReadingModeProps) {
   const router = useRouter();
-  const session = authClient.useSession();
-  const isAuthenticated = Boolean(session.data?.user);
   const paper = useQuery(trpc.papers.detail.queryOptions({ id: paperId }));
-  const progress = useQuery({
-    ...trpc.reading.getForPaper.queryOptions({ paperId }),
-    enabled: isAuthenticated,
-  });
+  const progress = useQuery(trpc.reading.getForPaper.queryOptions({ paperId }));
   const [sliderValue, setSliderValue] = useState(0);
   const initializedProgress = useRef(false);
   const startAttempted = useRef(false);
@@ -116,23 +110,16 @@ export default function ReadingMode({ paperId }: ReadingModeProps) {
   const startReadingMutation = startReading.mutate;
 
   useEffect(() => {
-    if (!session.isPending && !isAuthenticated) {
-      router.replace("/login");
-    }
-  }, [isAuthenticated, router, session.isPending]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !progress.isSuccess || initializedProgress.current) {
+    if (!progress.isSuccess || initializedProgress.current) {
       return;
     }
 
     initializedProgress.current = true;
     setSliderValue(progress.data?.progressPercentage ?? 0);
-  }, [isAuthenticated, progress.data?.progressPercentage, progress.isSuccess]);
+  }, [progress.data?.progressPercentage, progress.isSuccess]);
 
   useEffect(() => {
     if (
-      !isAuthenticated ||
       !progress.isSuccess ||
       progress.data?.status === "completed" ||
       startAttempted.current
@@ -142,7 +129,7 @@ export default function ReadingMode({ paperId }: ReadingModeProps) {
 
     startAttempted.current = true;
     startReadingMutation({ paperId });
-  }, [isAuthenticated, paperId, progress.data?.status, progress.isSuccess, startReadingMutation]);
+  }, [paperId, progress.data?.status, progress.isSuccess, startReadingMutation]);
 
   const handleSave = (exitAfterSave: boolean) => {
     saveProgress.mutate(
@@ -158,7 +145,7 @@ export default function ReadingMode({ paperId }: ReadingModeProps) {
     );
   };
 
-  if (session.isPending || (isAuthenticated && progress.isPending) || paper.isLoading) {
+  if (progress.isPending || paper.isLoading) {
     return (
       <main className="mx-auto grid w-full max-w-4xl gap-5 px-4 py-8">
         <Skeleton className="h-9 w-40 rounded-md" />
@@ -172,16 +159,6 @@ export default function ReadingMode({ paperId }: ReadingModeProps) {
             <Skeleton className="h-20 w-full rounded-md" />
           </CardContent>
         </Card>
-      </main>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <main className="mx-auto grid min-h-[60vh] w-full max-w-xl place-content-center gap-4 px-4 py-8 text-center">
-        <BookOpen className="mx-auto text-primary" size={32} />
-        <h1 className="text-2xl font-semibold">Sign in to use reading mode</h1>
-        <p className="text-sm leading-6 text-muted-foreground">Redirecting you to sign in...</p>
       </main>
     );
   }
