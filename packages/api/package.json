@@ -8,6 +8,9 @@
     "./services/*": {
       "default": "./src/services/*.ts"
     },
+    "./services/difficulty-classifier": {
+      "default": "./src/services/difficulty-classifier/index.ts"
+    },
     "./*": {
       "default": "./src/*.ts"
     }

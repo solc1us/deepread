@@ -1,4 +1,5 @@
-export { classifyPaperDifficulty, classifyPaperDifficultyV2 } from "./difficulty-classifier";
+export { classifyPaperDifficulty } from "./v1";
+export { classifyPaperDifficultyV2 } from "./v2";
 export type {
   ClassifyPaperDifficultyInput,
   DifficultyLevel,
@@ -7,4 +8,4 @@ export type {
   PaperDifficultyScores,
   PaperDifficultyV2Result,
   QualityGateResult,
-} from "./difficulty-classifier";
+} from "./types";
