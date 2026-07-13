@@ -125,13 +125,38 @@ function uniqueTerms(terms: string[]) {
   return [...new Set(terms)];
 }
 
+export const INTERRUPTED_TIME_SERIES_VARIANTS = [
+  "controlled interrupted time series",
+  "interrupted time series analysis",
+  "interrupted time series",
+] as const;
+
+export const SENSITIVITY_ANALYSIS_VARIANTS = ["sensitivity analyses", "sensitivity analysis"] as const;
+
+export const BIBLIOMETRIC_ANALYSIS_VARIANTS = [
+  "bibliometric analyses",
+  "bibliometric analysis",
+  "bibliometric methods",
+  "bibliometric method",
+  "bibliometric studies",
+  "bibliometric study",
+] as const;
+
+export const LIKELIHOOD_ESTIMATION_VARIANTS = [
+  "likelihood-based estimation",
+  "likelihood estimation",
+  "likelihood analysis",
+] as const;
+
+export const MATERIAL_SEMIOTIC_VARIANTS = ["material-semiotic", "material semiotic"] as const;
+
 export const V2_COMPLEX_METHODOLOGY_TERMS = uniqueTerms([
   ...COMPLEX_METHODOLOGY_TERMS,
   "adaptive intervention",
-  "bibliometric analysis",
+  ...BIBLIOMETRIC_ANALYSIS_VARIANTS,
   "compartmental modeling",
   "conditional process analysis",
-  "controlled interrupted time series",
+  ...INTERRUPTED_TIME_SERIES_VARIANTS,
   "intention-to-treat",
   "cohort study",
   "case-control study",
@@ -140,7 +165,6 @@ export const V2_COMPLEX_METHODOLOGY_TERMS = uniqueTerms([
   "epidemiological modeling",
   "evidence synthesis",
   "implementation science",
-  "interrupted time series analysis",
   "structural equation modeling",
   "path analysis",
   "mediation analysis",
@@ -162,7 +186,7 @@ export const V2_STATISTICAL_TERMS = uniqueTerms([
   "conditional process analysis",
   "linear regression",
   "hierarchical regression",
-  "likelihood estimation",
+  ...LIKELIHOOD_ESTIMATION_VARIANTS,
   "mixed-model ancova",
   "odds ratio",
   "hazard ratio",
@@ -177,7 +201,7 @@ export const V2_STATISTICAL_TERMS = uniqueTerms([
   "confirmatory factor analysis",
   "exploratory factor analysis",
   "repeated-measures analysis",
-  "sensitivity analysis",
+  ...SENSITIVITY_ANALYSIS_VARIANTS,
 ]);
 
 export const V2_ADVANCED_TECHNICAL_TERMS = uniqueTerms([
@@ -224,7 +248,7 @@ export const V2_PREREQUISITE_TERMS = uniqueTerms([
   "financialization",
   "intersectionality",
   "legitimation",
-  "material-semiotic",
+  ...MATERIAL_SEMIOTIC_VARIANTS,
   "multi-level social analysis",
   "network effects",
   "opportunity cost",
@@ -344,9 +368,8 @@ export const ADVANCED_SIGNAL_GROUPS = {
     "intention-to-treat",
     "causal inference",
     "adaptive intervention",
-    "controlled interrupted time series",
+    ...INTERRUPTED_TIME_SERIES_VARIANTS,
     "evidence synthesis",
-    "interrupted time series analysis",
     "quasi-experimental evaluation",
   ],
   machineLearning: [

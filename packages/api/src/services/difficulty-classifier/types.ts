@@ -50,13 +50,13 @@ export type PaperDifficultyV2Result =
       outcome: "classified";
       classification: PaperDifficultyClassification;
       qualityGate: QualityGateResult;
-      classificationVersion: "rule-based-v2.1.3";
+      classificationVersion: "rule-based-v2.1.4";
     }
   | {
       outcome: "needs_review";
       reviewReasons: string[];
       qualityGate: QualityGateResult;
-      classificationVersion: "rule-based-v2.1.3";
+      classificationVersion: "rule-based-v2.1.4";
     };
 
 export interface ClassifierV2Diagnostics {

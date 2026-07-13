@@ -1,6 +1,11 @@
 import type { CategoryProfile } from "./category-profiles";
 import {
   ADVANCED_SIGNAL_GROUPS,
+  BIBLIOMETRIC_ANALYSIS_VARIANTS,
+  INTERRUPTED_TIME_SERIES_VARIANTS,
+  LIKELIHOOD_ESTIMATION_VARIANTS,
+  MATERIAL_SEMIOTIC_VARIANTS,
+  SENSITIVITY_ANALYSIS_VARIANTS,
   V2_ACADEMIC_JARGON_TERMS,
   V2_ADVANCED_TECHNICAL_TERMS,
   V2_COMPLEX_METHODOLOGY_TERMS,
@@ -30,6 +35,15 @@ interface TermPenaltyRow {
   penalty: number;
   severity: IndicatorSeverity;
 }
+
+type TermVariantGroup = readonly string[];
+
+const METHODOLOGY_VARIANT_GROUPS = [
+  INTERRUPTED_TIME_SERIES_VARIANTS,
+  BIBLIOMETRIC_ANALYSIS_VARIANTS,
+] as const;
+const STATISTICAL_VARIANT_GROUPS = [SENSITIVITY_ANALYSIS_VARIANTS, LIKELIHOOD_ESTIMATION_VARIANTS] as const;
+const PREREQUISITE_VARIANT_GROUPS = [MATERIAL_SEMIOTIC_VARIANTS] as const;
 
 export const V2_SCORING_CONFIG = {
   maximumPenalties: {
@@ -219,14 +233,44 @@ function scoreDistinctTerms(
   terms: string[],
   maxPenalty: number,
   penaltyTable: readonly TermPenaltyRow[],
+  variantGroups: readonly TermVariantGroup[] = [],
 ): ScoredIndicator {
-  const matches = getNonOverlappingTermMatches(normalizedText, terms);
+  const matches = deduplicateTargetedTermVariants(
+    getNonOverlappingTermMatches(normalizedText, terms),
+    variantGroups,
+  );
   const row = penaltyTable[Math.min(matches.length, penaltyTable.length - 1)] ?? {
     penalty: 0,
     severity: "none",
   };
 
   return toScoredIndicator(row.penalty, maxPenalty, matches, row.severity);
+}
+
+function deduplicateTargetedTermVariants(matches: string[], variantGroups: readonly TermVariantGroup[]) {
+  const selectedVariants = new Map<string, string>();
+
+  for (const group of variantGroups) {
+    const matchedVariants = group.filter((term) => matches.includes(term));
+
+    if (matchedVariants.length < 2) {
+      continue;
+    }
+
+    const preferred = [...matchedVariants].sort(
+      (left, right) => right.length - left.length || group.indexOf(left) - group.indexOf(right),
+    )[0];
+
+    if (!preferred) {
+      continue;
+    }
+
+    for (const variant of matchedVariants) {
+      selectedVariants.set(variant, preferred);
+    }
+  }
+
+  return matches.filter((term) => !selectedVariants.has(term) || selectedVariants.get(term) === term);
 }
 
 function scoreClarity(input: NormalizedV2Input, wordCount: number): ScoredIndicator {
@@ -298,18 +342,21 @@ export function scorePaperDifficultyV2(input: NormalizedV2Input, profile: Catego
     V2_COMPLEX_METHODOLOGY_TERMS,
     V2_SCORING_CONFIG.maximumPenalties.methodology,
     V2_SCORING_CONFIG.termPenalties.methodology,
+    METHODOLOGY_VARIANT_GROUPS,
   );
   const statistical = scoreDistinctTerms(
     input.normalizedText,
     V2_STATISTICAL_TERMS,
     V2_SCORING_CONFIG.maximumPenalties.statistical,
     V2_SCORING_CONFIG.termPenalties.statistical,
+    STATISTICAL_VARIANT_GROUPS,
   );
   const prerequisite = scoreDistinctTerms(
     input.normalizedText,
     V2_PREREQUISITE_TERMS,
     V2_SCORING_CONFIG.maximumPenalties.prerequisite,
     V2_SCORING_CONFIG.termPenalties.prerequisite,
+    PREREQUISITE_VARIANT_GROUPS,
   );
   const jargon = scoreJargon(input.normalizedText, input.combinedText, wordCount, profile);
   const indicators = {
@@ -323,8 +370,11 @@ export function scorePaperDifficultyV2(input: NormalizedV2Input, profile: Catego
   };
   const advancedMatches = getAdvancedSignalMatches(input.normalizedText);
   const advancedMatchedTerms = new Set(advancedMatches.flatMap((match) => match.matchedTerms));
-  const categoryStrongTerms = getNonOverlappingTermMatches(input.normalizedText, profile.strongTerms).filter(
-    (term) => !advancedMatchedTerms.has(term),
+  const categoryStrongTerms = deduplicateTargetedTermVariants(
+    getNonOverlappingTermMatches(input.normalizedText, profile.strongTerms).filter(
+      (term) => !advancedMatchedTerms.has(term),
+    ),
+    PREREQUISITE_VARIANT_GROUPS,
   );
   const strongSignalCount = advancedMatches.length + categoryStrongTerms.length;
   const complexityAdjustment = getComplexityAdjustment(strongSignalCount, prerequisite.severity);

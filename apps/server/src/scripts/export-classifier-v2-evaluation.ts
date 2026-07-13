@@ -90,7 +90,7 @@ const outputPath = resolve(
 	import.meta.dir,
 	"../../../..",
 	"tmp",
-	"classifier-v2.1.3-diagnostics.csv",
+	"classifier-v2.1.4-diagnostics.csv",
 );
 
 type CsvColumn = (typeof CSV_COLUMNS)[number];
@@ -218,7 +218,7 @@ if (!envStatus.ok) {
 }
 
 console.log(
-	"DEV ONLY: Exporting read-only classifier v2.1.3 diagnostics. No database writes are performed.",
+	"DEV ONLY: Exporting read-only classifier v2.1.4 diagnostics. No database writes are performed.",
 );
 
 try {
@@ -408,7 +408,7 @@ try {
 
 		console.log(`total papers evaluated: ${rows.length}`);
 		console.log(
-			`v2.1.3 difficulty distribution: ${formatDistribution(v2Distribution)}`,
+			`v2.1.4 difficulty distribution: ${formatDistribution(v2Distribution)}`,
 		);
 		console.log(`total needs_review: ${needsReview}`);
 		console.log(

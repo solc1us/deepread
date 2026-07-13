@@ -1,3 +1,4 @@
+import { MATERIAL_SEMIOTIC_VARIANTS } from "./terms";
 import { normalizeText } from "./text-utils";
 
 export interface CategoryProfile {
@@ -106,6 +107,7 @@ export const CATEGORY_PROFILES: Record<string, CategoryProfile> = {
       "evidence synthesis",
       "implementation fidelity",
       "implementation science",
+      ...MATERIAL_SEMIOTIC_VARIANTS,
       "opportunity cost",
       "quasi-experimental evaluation",
       "reproduction number",
@@ -140,7 +142,7 @@ export const CATEGORY_PROFILES: Record<string, CategoryProfile> = {
       "financialization",
       "intersectionality",
       "legitimation",
-      "material-semiotic",
+      ...MATERIAL_SEMIOTIC_VARIANTS,
       "multi-level social analysis",
       "multilevel model",
       "network effects",

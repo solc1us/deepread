@@ -20,7 +20,7 @@ import type {
   PaperDifficultyV2WithDiagnosticsResult,
 } from "./types";
 
-const CLASSIFICATION_VERSION = "rule-based-v2.1.3" as const;
+const CLASSIFICATION_VERSION = "rule-based-v2.1.4" as const;
 
 function normalizeV2Input(input: ClassifyPaperDifficultyInput): NormalizedV2Input {
   const title = input.title.trim();
