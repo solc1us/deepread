@@ -58,3 +58,38 @@ export type PaperDifficultyV2Result =
       qualityGate: QualityGateResult;
       classificationVersion: "rule-based-v2.1";
     };
+
+export interface ClassifierV2Diagnostics {
+  normalizedCategory: string;
+  matchedMethodologyTerms: string[];
+  matchedStatisticalTerms: string[];
+  matchedTechnicalTerms: string[];
+  matchedPrerequisiteTerms: string[];
+  matchedJargonTerms: string[];
+  matchedAcronyms: string[];
+  matchedCategoryNeutralTerms: string[];
+  matchedCategoryStrongTerms: string[];
+  matchedAdvancedSignalGroups: string[];
+  abstractLengthPenalty: number | null;
+  sentenceComplexityPenalty: number | null;
+  jargonPenalty: number | null;
+  methodologyPenalty: number | null;
+  statisticalPenalty: number | null;
+  prerequisitePenalty: number | null;
+  clarityPenalty: number | null;
+  baseTotalPenalty: number | null;
+  complexityAdjustment: number | null;
+  beginnerEligibilityAdjustment: number | null;
+  finalTotalPenalty: number | null;
+  preliminaryBeginnerScore: number | null;
+  finalBeginnerScore: number | null;
+  preliminaryDifficulty: DifficultyLevel | null;
+  finalDifficulty: DifficultyLevel | null;
+  beginnerEligible: boolean | null;
+  qualityGateShouldReview: boolean;
+}
+
+export interface PaperDifficultyV2WithDiagnosticsResult {
+  result: PaperDifficultyV2Result;
+  diagnostics: ClassifierV2Diagnostics;
+}

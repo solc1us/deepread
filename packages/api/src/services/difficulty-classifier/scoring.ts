@@ -10,7 +10,7 @@ import {
 } from "./terms";
 import {
   clamp,
-  countAcronyms,
+  getAcronymMatches,
   getNonOverlappingTermMatches,
   splitSentences,
   tokenizeWords,
@@ -102,12 +102,28 @@ export interface V2ScoringResult {
   };
   scores: PaperDifficultyScores;
   beginnerScore: number;
+  preliminaryBeginnerScore: number;
+  baseTotalPenalty: number;
+  finalTotalPenalty: number;
+  beginnerEligible: boolean;
+  matchedTechnicalTerms: string[];
+  matchedJargonTerms: string[];
+  matchedAcronyms: string[];
+  matchedCategoryNeutralTerms: string[];
   advancedSignalGroups: string[];
   categoryStrongTerms: string[];
   complexityAdjustment: number;
   beginnerEligibilityAdjustment: number;
   drivers: string[];
   abstractWordCount: number;
+}
+
+interface JargonScoringResult {
+  indicator: ScoredIndicator;
+  technicalTerms: string[];
+  jargonTerms: string[];
+  acronyms: string[];
+  categoryNeutralTerms: string[];
 }
 
 function toIndicatorScore(penalty: number, maxPenalty: number) {
@@ -177,7 +193,7 @@ function scoreJargon(
   originalText: string,
   wordCount: number,
   profile: CategoryProfile,
-): ScoredIndicator {
+): JargonScoringResult {
   const maxPenalty = V2_SCORING_CONFIG.maximumPenalties.jargonDensity;
   const jargonMatches = getNonOverlappingTermMatches(normalizedText, V2_ACADEMIC_JARGON_TERMS);
   const technicalMatches = getNonOverlappingTermMatches(normalizedText, V2_ADVANCED_TECHNICAL_TERMS);
@@ -185,11 +201,17 @@ function scoreJargon(
   const adjustedJargon = jargonMatches.filter((term) => !neutralTerms.has(term));
   const adjustedTechnical = technicalMatches.filter((term) => !neutralTerms.has(term));
   const distinctTerms = [...new Set([...adjustedJargon, ...adjustedTechnical])];
-  const acronymCount = countAcronyms(originalText);
-  const density = wordCount > 0 ? ((distinctTerms.length + acronymCount) / wordCount) * 100 : 0;
+  const acronyms = getAcronymMatches(originalText);
+  const density = wordCount > 0 ? ((distinctTerms.length + acronyms.length) / wordCount) * 100 : 0;
   const penalty = density * V2_SCORING_CONFIG.jargonDensityWeight;
 
-  return toScoredIndicator(penalty, maxPenalty, distinctTerms);
+  return {
+    indicator: toScoredIndicator(penalty, maxPenalty, distinctTerms),
+    technicalTerms: adjustedTechnical,
+    jargonTerms: adjustedJargon,
+    acronyms,
+    categoryNeutralTerms: getNonOverlappingTermMatches(normalizedText, profile.neutralJargonTerms),
+  };
 }
 
 function scoreDistinctTerms(
@@ -289,10 +311,11 @@ export function scorePaperDifficultyV2(input: NormalizedV2Input, profile: Catego
     V2_SCORING_CONFIG.maximumPenalties.prerequisite,
     V2_SCORING_CONFIG.termPenalties.prerequisite,
   );
+  const jargon = scoreJargon(input.normalizedText, input.combinedText, wordCount, profile);
   const indicators = {
     abstractLength: scoreAbstractLength(wordCount),
     sentenceComplexity: scoreSentenceComplexity(sentences, wordCount),
-    jargonDensity: scoreJargon(input.normalizedText, input.combinedText, wordCount, profile),
+    jargonDensity: jargon.indicator,
     methodologyComplexity: methodology,
     statisticalComplexity: statistical,
     prerequisiteComplexity: prerequisite,
@@ -318,6 +341,7 @@ export function scorePaperDifficultyV2(input: NormalizedV2Input, profile: Catego
       ? preliminaryScore - (V2_DIFFICULTY_THRESHOLDS.beginnerFriendly - 1)
       : 0;
   const beginnerScore = clamp(preliminaryScore - beginnerEligibilityAdjustment, 0, 100);
+  const finalTotalPenalty = basePenalty + complexityAdjustment + beginnerEligibilityAdjustment;
   const scores: PaperDifficultyScores = {
     abstractLengthScore: indicators.abstractLength.score,
     sentenceComplexityScore: indicators.sentenceComplexity.score,
@@ -332,6 +356,14 @@ export function scorePaperDifficultyV2(input: NormalizedV2Input, profile: Catego
     indicators,
     scores,
     beginnerScore,
+    preliminaryBeginnerScore: preliminaryScore,
+    baseTotalPenalty: basePenalty,
+    finalTotalPenalty,
+    beginnerEligible,
+    matchedTechnicalTerms: jargon.technicalTerms,
+    matchedJargonTerms: jargon.jargonTerms,
+    matchedAcronyms: jargon.acronyms,
+    matchedCategoryNeutralTerms: jargon.categoryNeutralTerms,
     advancedSignalGroups: advancedMatches.map((match) => match.group),
     categoryStrongTerms,
     complexityAdjustment,
