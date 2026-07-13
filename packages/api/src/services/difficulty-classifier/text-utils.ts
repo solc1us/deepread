@@ -38,6 +38,10 @@ export function getNonOverlappingTermMatches(text: string, terms: string[]) {
 }
 
 export function countAcronyms(text: string) {
+  return getAcronymMatches(text).length;
+}
+
+export function getAcronymMatches(text: string) {
   const matches = text.match(/\b[A-Z]{2,}(?:-[A-Z0-9]+)?\b/g) ?? [];
-  return matches.filter((item) => !["PDF", "DOI", "URL"].includes(item)).length;
+  return matches.filter((item) => !["PDF", "DOI", "URL"].includes(item));
 }
