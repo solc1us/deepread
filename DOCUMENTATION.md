@@ -808,7 +808,7 @@ Jumlah user yang mulai membaca paper setelah melihat difficulty level dan beginn
 | Phase 6   | Access control audit and user-private data security cleanup            | Completed |
 | Phase 7   | Reading statistics and reading habit insights                          | Completed |
 | Phase 8   | Admin monitoring dashboard and pipeline controls                       | Completed |
-| Phase 9   | Classifier evaluation, calibration, and classifier v2 planning         | Planned   |
+| Phase 9   | Classifier evaluation, calibration, and classifier v2 planning         | Completed |
 | Phase 10  | Data expansion, query refinement, and data cleanup                     | Planned   |
 | Phase 11  | Final testing, performance check, deployment, and documentation update | Planned   |
 

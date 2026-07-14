@@ -1,13 +1,23 @@
 import prisma from "@deepread/db";
 
 import {
-  classifyPaperDifficulty,
+  classifyPaperDifficultyV2,
   type PaperDifficultyClassification,
 } from "./paper-difficulty-classifier";
 
 const DEFAULT_CLASSIFICATION_LIMIT = 10;
 const MAX_CLASSIFICATION_LIMIT = 50;
-export const CLASSIFICATION_VERSION = "rule-based-v1";
+export const CLASSIFICATION_VERSION = "rule-based-v2.1.4";
+
+export class PaperClassificationServiceError extends Error {
+  constructor(
+    public readonly code: "PAPER_NOT_FOUND" | "PAPER_INACTIVE",
+    message: string,
+  ) {
+    super(message);
+    this.name = "PaperClassificationServiceError";
+  }
+}
 
 export interface ClassifyPendingPapersInput {
   limit?: number;
@@ -16,8 +26,10 @@ export interface ClassifyPendingPapersInput {
 
 export interface ClassifyPaperByIdResult {
   paperId: string;
-  status: "published" | "rejected";
+  status: "published" | "needs_review" | "rejected";
   classification?: PaperDifficultyClassification;
+  classificationVersion?: typeof CLASSIFICATION_VERSION;
+  reviewReasons?: string[];
   rejectionReason?: string;
 }
 
@@ -25,8 +37,13 @@ export interface ClassifyPendingPapersResult {
   totalFound: number;
   totalClassified: number;
   totalPublished: number;
+  totalNeedsReview: number;
   totalRejected: number;
   totalFailed: number;
+  reviews: Array<{
+    paperId: string;
+    reasons: string[];
+  }>;
   errors: string[];
 }
 
@@ -48,7 +65,10 @@ function toStringArray(value: unknown) {
   return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
-function buildClassificationData(classification: PaperDifficultyClassification) {
+function buildClassificationData(
+  classification: PaperDifficultyClassification,
+  classificationVersion: typeof CLASSIFICATION_VERSION,
+) {
   return {
     difficultyLevel: classification.difficultyLevel,
     beginnerScore: classification.beginnerScore,
@@ -63,7 +83,7 @@ function buildClassificationData(classification: PaperDifficultyClassification) 
     classificationReason: classification.classificationReason,
     readingWarning: classification.readingWarning,
     recommendedReader: classification.recommendedReader,
-    classificationVersion: CLASSIFICATION_VERSION,
+    classificationVersion,
   };
 }
 
@@ -102,6 +122,7 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
       abstract: true,
       keywords: true,
       publicationYear: true,
+      status: true,
       category: {
         select: {
           id: true,
@@ -112,7 +133,11 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
   });
 
   if (!paper) {
-    throw new Error(`Paper not found: ${paperId}`);
+    throw new PaperClassificationServiceError("PAPER_NOT_FOUND", "Paper not found");
+  }
+
+  if (paper.status === "inactive") {
+    throw new PaperClassificationServiceError("PAPER_INACTIVE", "Inactive papers cannot be classified");
   }
 
   const validationError = getValidationError(paper);
@@ -121,6 +146,9 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
     await prisma.paper.update({
       where: {
         id: paper.id,
+        status: {
+          not: "inactive",
+        },
       },
       data: {
         status: "rejected",
@@ -134,10 +162,10 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
     };
   }
 
-  let classification: PaperDifficultyClassification;
+  let classifierResult: ReturnType<typeof classifyPaperDifficultyV2>;
 
   try {
-    classification = classifyPaperDifficulty({
+    classifierResult = classifyPaperDifficultyV2({
       title: paper.title,
       abstract: paper.abstract,
       keywords: toStringArray(paper.keywords),
@@ -150,6 +178,9 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
     await prisma.paper.update({
       where: {
         id: paper.id,
+        status: {
+          not: "inactive",
+        },
       },
       data: {
         status: "rejected",
@@ -163,7 +194,31 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
     };
   }
 
-  const classificationData = buildClassificationData(classification);
+  if (classifierResult.outcome === "needs_review") {
+    await prisma.paper.update({
+      where: {
+        id: paper.id,
+        status: {
+          not: "inactive",
+        },
+      },
+      data: {
+        status: "needs_review",
+      },
+    });
+
+    return {
+      paperId: paper.id,
+      status: "needs_review",
+      classificationVersion: classifierResult.classificationVersion,
+      reviewReasons: classifierResult.reviewReasons,
+    };
+  }
+
+  const classificationData = buildClassificationData(
+    classifierResult.classification,
+    classifierResult.classificationVersion,
+  );
 
   await prisma.$transaction([
     prisma.paperClassification.upsert({
@@ -179,6 +234,9 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
     prisma.paper.update({
       where: {
         id: paper.id,
+        status: {
+          not: "inactive",
+        },
       },
       data: {
         status: "published",
@@ -189,7 +247,8 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
   return {
     paperId: paper.id,
     status: "published",
-    classification,
+    classification: classifierResult.classification,
+    classificationVersion: classifierResult.classificationVersion,
   };
 }
 
@@ -210,8 +269,10 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
   });
   let totalClassified = 0;
   let totalPublished = 0;
+  let totalNeedsReview = 0;
   let totalRejected = 0;
   let totalFailed = 0;
+  const reviews: ClassifyPendingPapersResult["reviews"] = [];
   const errors: string[] = [];
 
   for (const paper of pendingPapers) {
@@ -221,6 +282,12 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
       if (result.status === "published") {
         totalClassified += 1;
         totalPublished += 1;
+      } else if (result.status === "needs_review") {
+        totalNeedsReview += 1;
+        reviews.push({
+          paperId: paper.id,
+          reasons: result.reviewReasons ?? [],
+        });
       } else {
         totalRejected += 1;
         errors.push(`Rejected paper ${paper.id}: ${result.rejectionReason ?? "classification could not be performed"}`);
@@ -235,8 +302,10 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
     totalFound: pendingPapers.length,
     totalClassified,
     totalPublished,
+    totalNeedsReview,
     totalRejected,
     totalFailed,
+    reviews,
     errors,
   };
 }

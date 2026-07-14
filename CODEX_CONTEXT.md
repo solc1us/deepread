@@ -62,12 +62,12 @@ Completed:
 - Phase 6.5: tRPC routers split by feature
 - Phase 7: user reading statistics dashboard
 - Phase 8: admin monitoring dashboard, admin sidebar, pipeline controls, logs table, papers monitor, DB health status
+- Phase 9: classifier evaluation/calibration
 
 Planned:
 
-- Phase 8.5: classifier evaluation/calibration
-- Phase 9: data expansion and cleanup
-- Phase 10: final testing, hardening, deployment, docs update
+- Phase 10: data expansion and cleanup
+- Phase 11: final testing, hardening, deployment, docs update
 
 Deferred:
 

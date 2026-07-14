@@ -2,7 +2,11 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { adminProcedure, router } from "../../index";
-import { classifyPaperById, classifyPendingPapers } from "../../services/paper-classification";
+import {
+  classifyPaperById,
+  classifyPendingPapers,
+  PaperClassificationServiceError,
+} from "../../services/paper-classification";
 import { classifyPaperDifficulty } from "../../services/paper-difficulty-classifier";
 
 const adminClassificationRunForPaperInputSchema = z.object({
@@ -29,10 +33,17 @@ export const adminClassificationRouter = router({
     try {
       return await classifyPaperById(input.paperId);
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith("Paper not found:")) {
+      if (error instanceof PaperClassificationServiceError && error.code === "PAPER_NOT_FOUND") {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Paper not found",
+        });
+      }
+
+      if (error instanceof PaperClassificationServiceError && error.code === "PAPER_INACTIVE") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error.message,
         });
       }
 

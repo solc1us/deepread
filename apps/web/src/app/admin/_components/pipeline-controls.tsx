@@ -40,6 +40,7 @@ type ClassificationBatchResult = {
 	totalFound: number;
 	totalClassified: number;
 	totalPublished: number;
+	totalNeedsReview: number;
 	totalRejected: number;
 	totalFailed: number;
 	errors?: string[];
@@ -359,6 +360,7 @@ export default function PipelineControls() {
 									<span>Found {classificationResult.totalFound}</span>
 									<span>Classified {classificationResult.totalClassified}</span>
 									<span>Published {classificationResult.totalPublished}</span>
+									<span>Needs review {classificationResult.totalNeedsReview}</span>
 									<span>Rejected {classificationResult.totalRejected}</span>
 									<span>Failed {classificationResult.totalFailed}</span>
 								</div>
