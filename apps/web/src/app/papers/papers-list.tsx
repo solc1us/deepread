@@ -7,11 +7,13 @@ import { Skeleton } from "@deepread/ui/components/skeleton";
 import { cn } from "@deepread/ui/lib/utils";
 import { AlertCircle, Bookmark, BookmarkCheck, Clock, Search } from "lucide-react";
 import Link from "next/link";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
+import { formatCompactAuthors } from "@/lib/paper-authors";
 import { markProfileOverviewStale, queryClient, trpc } from "@/utils/trpc";
 
 const difficulties = [
@@ -30,6 +32,17 @@ const sorts = [
 
 type Difficulty = Exclude<(typeof difficulties)[number]["value"], "">;
 type Sort = (typeof sorts)[number]["value"];
+
+type DraftFilters = {
+  q: string;
+  categoryId: string;
+  difficulty: Difficulty | "";
+  sort: Sort;
+};
+
+type AppliedFilters = DraftFilters & {
+  page: number;
+};
 
 type PapersListProps = {
   initialFilters: {
@@ -81,18 +94,13 @@ function getDifficultyClass(value: string | null | undefined) {
   }
 }
 
-function buildHref(filters: PapersListProps["initialFilters"], page: number) {
-  const query: Record<string, string> = {};
-
-  for (const [key, value] of Object.entries({ ...filters, page: String(page) })) {
-    if (value) {
-      query[key] = value;
-    }
-  }
-
+function getInitialFilterState(initialFilters: PapersListProps["initialFilters"]): AppliedFilters {
   return {
-    pathname: "/papers",
-    query,
+    q: initialFilters.q ?? "",
+    categoryId: initialFilters.categoryId ?? "",
+    difficulty: getDifficulty(initialFilters.difficulty) ?? "",
+    sort: getSort(initialFilters.sort),
+    page: getPage(initialFilters.page),
   };
 }
 
@@ -119,21 +127,31 @@ export default function PapersList({ initialFilters }: PapersListProps) {
   const router = useRouter();
   const session = authClient.useSession();
   const isAuthenticated = Boolean(session.data?.user);
-  const page = getPage(initialFilters.page);
-  const difficulty = getDifficulty(initialFilters.difficulty);
-  const sort = getSort(initialFilters.sort);
+  const [draftFilters, setDraftFilters] = useState<DraftFilters>(() => {
+    const initial = getInitialFilterState(initialFilters);
+    return {
+      q: initial.q,
+      categoryId: initial.categoryId,
+      difficulty: initial.difficulty,
+      sort: initial.sort,
+    };
+  });
+  const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>(() =>
+    getInitialFilterState(initialFilters),
+  );
 
   const categories = useQuery(trpc.categories.list.queryOptions());
-  const papers = useQuery(
-    trpc.papers.list.queryOptions({
-      q: initialFilters.q || undefined,
-      categoryId: initialFilters.categoryId || undefined,
-      difficulty: difficulty || undefined,
-      sort,
-      page,
+  const papers = useQuery({
+    ...trpc.papers.list.queryOptions({
+      q: appliedFilters.q || undefined,
+      categoryId: appliedFilters.categoryId || undefined,
+      difficulty: appliedFilters.difficulty || undefined,
+      sort: appliedFilters.sort,
+      page: appliedFilters.page,
       limit: 10,
     }),
-  );
+    placeholderData: keepPreviousData,
+  });
   const refreshPapers = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: trpc.papers.list.queryKey() }),
@@ -173,6 +191,19 @@ export default function PapersList({ initialFilters }: PapersListProps) {
     }
   };
 
+  const handleFilterSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAppliedFilters({
+      ...draftFilters,
+      q: draftFilters.q.trim(),
+      page: 1,
+    });
+  };
+
+  const handlePageChange = (page: number) => {
+    setAppliedFilters((current) => ({ ...current, page }));
+  };
+
   return (
     <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8">
       <section className="grid gap-3">
@@ -195,16 +226,21 @@ export default function PapersList({ initialFilters }: PapersListProps) {
         </div>
       </section>
 
-      <form className="grid gap-3 rounded-lg border bg-card p-4 shadow-sm md:grid-cols-[1fr_220px_180px_150px_auto]">
+      <form
+        className="grid gap-3 rounded-lg border bg-card p-4 shadow-sm md:grid-cols-[1fr_220px_180px_150px_auto]"
+        onSubmit={handleFilterSubmit}
+      >
         <label className="grid gap-1 text-xs font-medium text-muted-foreground">
           Search
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               className="h-10 rounded-md bg-background pl-8 text-sm"
-              defaultValue={initialFilters.q ?? ""}
-              name="q"
+              onChange={(event) =>
+                setDraftFilters((current) => ({ ...current, q: event.target.value }))
+              }
               placeholder="Title, abstract, or source"
+              value={draftFilters.q}
             />
           </div>
         </label>
@@ -212,8 +248,10 @@ export default function PapersList({ initialFilters }: PapersListProps) {
           Category
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
-            defaultValue={initialFilters.categoryId ?? ""}
-            name="categoryId"
+            onChange={(event) =>
+              setDraftFilters((current) => ({ ...current, categoryId: event.target.value }))
+            }
+            value={draftFilters.categoryId}
           >
             <option value="">All categories</option>
             {categories.data?.map((category) => (
@@ -227,8 +265,13 @@ export default function PapersList({ initialFilters }: PapersListProps) {
           Difficulty
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
-            defaultValue={difficulty ?? ""}
-            name="difficulty"
+            onChange={(event) =>
+              setDraftFilters((current) => ({
+                ...current,
+                difficulty: getDifficulty(event.target.value) ?? "",
+              }))
+            }
+            value={draftFilters.difficulty}
           >
             {difficulties.map((item) => (
               <option key={item.value} value={item.value}>
@@ -241,8 +284,10 @@ export default function PapersList({ initialFilters }: PapersListProps) {
           Sort
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
-            defaultValue={sort}
-            name="sort"
+            onChange={(event) =>
+              setDraftFilters((current) => ({ ...current, sort: getSort(event.target.value) }))
+            }
+            value={draftFilters.sort}
           >
             {sorts.map((item) => (
               <option key={item.value} value={item.value}>
@@ -258,28 +303,46 @@ export default function PapersList({ initialFilters }: PapersListProps) {
         </div>
       </form>
 
-      {papers.isLoading ? (
-        <PaperListSkeleton />
-      ) : papers.isError ? (
-        <Card className="rounded-lg border-border/80 shadow-sm">
-          <CardContent className="flex items-start gap-3 py-4">
-            <AlertCircle className="mt-0.5 text-destructive" />
-            <div className="grid gap-1">
-              <div className="text-sm font-medium">Unable to load papers</div>
-              <p className="text-sm text-muted-foreground">Check that the API server is running and try again.</p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : papers.data?.papers.length ? (
-        <div className="grid gap-3">
-          {papers.data.papers.map((paper) => (
+      <section aria-busy={papers.isFetching} className="grid min-h-[24rem] content-start gap-3">
+        <div aria-live="polite" className="min-h-5 text-xs text-muted-foreground" role="status">
+          {papers.isFetching && !papers.isLoading ? "Updating paper results..." : null}
+        </div>
+
+        {papers.isLoading ? (
+          <PaperListSkeleton />
+        ) : papers.isError ? (
+          <Card className="rounded-lg border-border/80 shadow-sm">
+            <CardContent className="flex flex-wrap items-start justify-between gap-3 py-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 text-destructive" />
+                <div className="grid gap-1">
+                  <div className="text-sm font-medium">Unable to load papers</div>
+                  <p className="text-sm text-muted-foreground">
+                    Check that the API server is running and try again.
+                  </p>
+                </div>
+              </div>
+              <Button onClick={() => void papers.refetch()} type="button" variant="outline">
+                Try again
+              </Button>
+            </CardContent>
+          </Card>
+        ) : papers.data?.papers.length ? (
+          <div className="grid gap-3">
+            {papers.data.papers.map((paper) => (
             <Card className="rounded-lg border-border/80 shadow-sm transition-colors hover:border-primary/30" key={paper.id}>
               <CardHeader className="gap-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="grid gap-2">
                     <CardTitle className="text-lg leading-7 tracking-normal md:text-xl">{paper.title}</CardTitle>
                     <p className="text-sm leading-6 text-muted-foreground">
-                      {paper.authors.join(", ")} {paper.publicationYear ? `- ${paper.publicationYear}` : ""}
+                      {formatCompactAuthors(paper.authors)}
+                      {paper.publicationYear ? (
+                        <>
+                          {" "}
+                          <span aria-hidden="true">&middot;</span> {paper.publicationYear}
+                        </>
+                      ) : null}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2 text-xs font-medium">
@@ -348,48 +411,47 @@ export default function PapersList({ initialFilters }: PapersListProps) {
                 </div>
               </CardFooter>
             </Card>
-          ))}
-        </div>
-      ) : (
-        <Card className="rounded-lg border-border/80 shadow-sm">
-          <CardContent className="grid gap-2 py-8 text-center">
-            <div className="text-sm font-medium">No papers found</div>
-            <p className="mx-auto max-w-md text-sm leading-6 text-muted-foreground">
-              Try a broader search or run the database seed to add development papers.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+            ))}
+          </div>
+        ) : (
+          <Card className="rounded-lg border-border/80 shadow-sm">
+            <CardContent className="grid gap-2 py-8 text-center">
+              <div className="text-sm font-medium">No papers found</div>
+              <p className="mx-auto max-w-md text-sm leading-6 text-muted-foreground">
+                No published papers match the selected filters. Try a broader search.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-      {papers.data ? (
-        <div className="flex items-center justify-between gap-3 text-sm">
-          <span className="text-muted-foreground">
-            Page {papers.data.pagination.page} of {Math.max(papers.data.pagination.totalPages, 1)}
-          </span>
-          <div className="flex gap-2">
-            {page > 1 ? (
+        {papers.data ? (
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">
+              Page {papers.data.pagination.page} of {Math.max(papers.data.pagination.totalPages, 1)}
+            </span>
+            <div className="flex gap-2">
               <Button
-                className="rounded-md"
-                nativeButton={false}
+                disabled={papers.isFetching || papers.data.pagination.page <= 1}
+                onClick={() => handlePageChange(papers.data.pagination.page - 1)}
+                type="button"
                 variant="outline"
-                render={<Link href={buildHref(initialFilters, page - 1)} />}
               >
                 Previous
               </Button>
-            ) : null}
-            {page < papers.data.pagination.totalPages ? (
               <Button
-                className="rounded-md"
-                nativeButton={false}
+                disabled={
+                  papers.isFetching || papers.data.pagination.page >= papers.data.pagination.totalPages
+                }
+                onClick={() => handlePageChange(papers.data.pagination.page + 1)}
+                type="button"
                 variant="outline"
-                render={<Link href={buildHref(initialFilters, page + 1)} />}
               >
                 Next
               </Button>
-            ) : null}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </section>
     </main>
   );
 }
