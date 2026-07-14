@@ -1,10 +1,14 @@
 import prisma from "@deepread/db";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { adminProcedure, router } from "../../index";
 import { difficultyLevelSchema } from "../shared";
 
-const paperStatusSchema = z.enum(["pending", "published", "rejected"]);
+const paperStatusSchema = z.enum(["pending", "needs_review", "published", "rejected", "inactive"]);
+const paperIdInputSchema = z.object({
+  paperId: z.string().uuid(),
+});
 
 const adminPaperListInputSchema = z.object({
   status: paperStatusSchema.optional(),
@@ -13,6 +17,51 @@ const adminPaperListInputSchema = z.object({
   page: z.number().int().min(1).default(1),
   limit: z.number().int().min(1).max(100).default(20),
 });
+
+const statusChangePaperSelect = {
+  id: true,
+  status: true,
+  classification: {
+    select: {
+      difficultyLevel: true,
+      beginnerScore: true,
+      classificationVersion: true,
+    },
+  },
+} as const;
+
+function hasValidClassification(
+  classification: {
+    difficultyLevel: string;
+    beginnerScore: number;
+    classificationVersion: string;
+  } | null,
+) {
+  return Boolean(
+    classification &&
+      classification.difficultyLevel &&
+      Number.isInteger(classification.beginnerScore) &&
+      classification.beginnerScore >= 0 &&
+      classification.beginnerScore <= 100 &&
+      classification.classificationVersion.trim(),
+  );
+}
+
+async function getPaperForStatusChange(paperId: string) {
+  const paper = await prisma.paper.findUnique({
+    where: { id: paperId },
+    select: statusChangePaperSelect,
+  });
+
+  if (!paper) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Paper not found",
+    });
+  }
+
+  return paper;
+}
 
 export const adminPapersRouter = router({
   list: adminProcedure.input(adminPaperListInputSchema).query(async ({ input }) => {
@@ -52,6 +101,7 @@ export const adminPapersRouter = router({
             select: {
               difficultyLevel: true,
               beginnerScore: true,
+              classificationVersion: true,
             },
           },
         },
@@ -73,6 +123,7 @@ export const adminPapersRouter = router({
               beginnerScore: paper.classification.beginnerScore,
             }
           : null,
+        hasValidClassification: hasValidClassification(paper.classification),
         difficultyLevel: paper.classification?.difficultyLevel ?? null,
         beginnerScore: paper.classification?.beginnerScore ?? null,
       })),
@@ -83,5 +134,64 @@ export const adminPapersRouter = router({
         totalPages: Math.ceil(total / input.limit),
       },
     };
+  }),
+  deactivate: adminProcedure.input(paperIdInputSchema).mutation(async ({ input }) => {
+    const paper = await getPaperForStatusChange(input.paperId);
+
+    if (paper.status !== "published" && paper.status !== "needs_review") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Only published or needs-review papers can be deactivated",
+      });
+    }
+
+    return await prisma.paper.update({
+      where: { id: paper.id },
+      data: { status: "inactive" },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+  }),
+  reactivate: adminProcedure.input(paperIdInputSchema).mutation(async ({ input }) => {
+    const paper = await getPaperForStatusChange(input.paperId);
+
+    if (paper.status !== "inactive") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Only inactive papers can be reactivated",
+      });
+    }
+
+    return await prisma.paper.update({
+      where: { id: paper.id },
+      data: {
+        status: hasValidClassification(paper.classification) ? "published" : "needs_review",
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+  }),
+  publish: adminProcedure.input(paperIdInputSchema).mutation(async ({ input }) => {
+    const paper = await getPaperForStatusChange(input.paperId);
+
+    if (!hasValidClassification(paper.classification)) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "A valid classification is required before publication",
+      });
+    }
+
+    return await prisma.paper.update({
+      where: { id: paper.id },
+      data: { status: "published" },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
   }),
 });

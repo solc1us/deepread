@@ -3,7 +3,6 @@ import prisma from "@deepread/db";
 import { protectedProcedure, router } from "../index";
 import {
   createNoteInputSchema,
-  ensurePaperExists,
   ensurePublishedPaper,
   noteIdInputSchema,
   paperIdInputSchema,
@@ -17,6 +16,9 @@ export const notesRouter = router({
     const notes = await prisma.readingNote.findMany({
       where: {
         userId: ctx.session.user.id,
+        paper: {
+          status: "published",
+        },
       },
       orderBy: {
         updatedAt: "desc",
@@ -93,7 +95,7 @@ export const notesRouter = router({
     };
   }),
   listForPaper: protectedProcedure.input(paperIdInputSchema).query(async ({ ctx, input }) => {
-    await ensurePaperExists(input.paperId);
+    await ensurePublishedPaper(input.paperId);
 
     return await prisma.readingNote.findMany({
       where: {

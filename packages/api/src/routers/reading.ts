@@ -146,6 +146,8 @@ export const readingRouter = router({
     });
   }),
   getForPaper: protectedProcedure.input(paperIdInputSchema).query(async ({ ctx, input }) => {
+    await ensurePublishedPaper(input.paperId);
+
     return await prisma.readingProgress.findUnique({
       where: {
         userId_paperId: {

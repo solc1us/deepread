@@ -119,26 +119,6 @@ export async function ensurePublishedPaper(paperId: string) {
   if (!paper) {
     throw new TRPCError({
       code: "NOT_FOUND",
-      message: "Published paper not found",
-    });
-  }
-
-  return paper;
-}
-
-export async function ensurePaperExists(paperId: string) {
-  const paper = await prisma.paper.findUnique({
-    where: {
-      id: paperId,
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (!paper) {
-    throw new TRPCError({
-      code: "NOT_FOUND",
       message: "Paper not found",
     });
   }

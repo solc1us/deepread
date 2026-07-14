@@ -8,6 +8,9 @@ export const bookmarkRouter = router({
     const bookmarks = await prisma.bookmark.findMany({
       where: {
         userId: ctx.session.user.id,
+        paper: {
+          status: "published",
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -51,6 +54,8 @@ export const bookmarkRouter = router({
     };
   }),
   getForPaper: protectedProcedure.input(paperIdInputSchema).query(async ({ ctx, input }) => {
+    await ensurePublishedPaper(input.paperId);
+
     const bookmark = await prisma.bookmark.findUnique({
       where: {
         userId_paperId: {

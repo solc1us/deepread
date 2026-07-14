@@ -5,8 +5,10 @@ enum UserRole {
 
 enum PaperStatus {
   pending
+  needs_review
   published
   rejected
+  inactive
 }
 
 enum DifficultyLevel {

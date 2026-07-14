@@ -36,10 +36,14 @@ export function getAdminStatusClass(value: string | null | undefined) {
     case "pending":
     case "partial":
       return "bg-difficulty-difficult text-difficulty-difficult-foreground";
+    case "needs_review":
+      return "bg-difficulty-moderate text-difficulty-moderate-foreground";
     case "rejected":
     case "failed":
     case "disconnected":
       return "bg-difficulty-expert text-difficulty-expert-foreground";
+    case "inactive":
+      return "border border-border bg-muted text-muted-foreground";
     default:
       return "bg-muted text-muted-foreground";
   }

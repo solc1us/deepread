@@ -77,6 +77,9 @@ export const profileRouter = router({
       prisma.readingNote.count({
         where: {
           userId,
+          paper: {
+            status: "published",
+          },
         },
       }),
     ]);

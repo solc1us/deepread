@@ -2,11 +2,11 @@ import prisma from "@deepread/db";
 
 import { adminProcedure, router } from "../../index";
 
-type PaperStatusValue = "pending" | "published" | "rejected";
+type PaperStatusValue = "pending" | "needs_review" | "published" | "rejected" | "inactive";
 type DifficultyLevelValue = "beginner_friendly" | "moderate" | "difficult" | "expert";
 type IngestionStatusValue = "success" | "failed" | "partial";
 
-const paperStatuses: PaperStatusValue[] = ["published", "pending", "rejected"];
+const paperStatuses: PaperStatusValue[] = ["published", "pending", "needs_review", "rejected", "inactive"];
 const difficultyLevels: DifficultyLevelValue[] = ["beginner_friendly", "moderate", "difficult", "expert"];
 const ingestionStatuses: IngestionStatusValue[] = ["success", "failed", "partial"];
 
@@ -49,7 +49,9 @@ export const adminDashboardRouter = router({
           totalPapers: 0,
           publishedPapers: 0,
           pendingPapers: 0,
+          needsReviewPapers: 0,
           rejectedPapers: 0,
+          inactivePapers: 0,
         },
         classificationSummary: {
           classifiedPapers: 0,
@@ -215,7 +217,9 @@ export const adminDashboardRouter = router({
         totalPapers: number;
         publishedPapers: number;
         pendingPapers: number;
+        needsReviewPapers: number;
         rejectedPapers: number;
+        inactivePapers: number;
       }
     >(
       categories.map((category) => [
@@ -226,7 +230,9 @@ export const adminDashboardRouter = router({
           totalPapers: 0,
           publishedPapers: 0,
           pendingPapers: 0,
+          needsReviewPapers: 0,
           rejectedPapers: 0,
+          inactivePapers: 0,
         },
       ]),
     );
@@ -243,8 +249,12 @@ export const adminDashboardRouter = router({
         category.publishedPapers = group._count._all;
       } else if (group.status === "pending") {
         category.pendingPapers = group._count._all;
+      } else if (group.status === "needs_review") {
+        category.needsReviewPapers = group._count._all;
       } else if (group.status === "rejected") {
         category.rejectedPapers = group._count._all;
+      } else if (group.status === "inactive") {
+        category.inactivePapers = group._count._all;
       }
     }
 
@@ -264,7 +274,9 @@ export const adminDashboardRouter = router({
         totalPapers,
         publishedPapers: paperStatusCounts.get("published") ?? 0,
         pendingPapers: paperStatusCounts.get("pending") ?? 0,
+        needsReviewPapers: paperStatusCounts.get("needs_review") ?? 0,
         rejectedPapers: paperStatusCounts.get("rejected") ?? 0,
+        inactivePapers: paperStatusCounts.get("inactive") ?? 0,
       },
       classificationSummary: {
         classifiedPapers,

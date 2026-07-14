@@ -4,12 +4,13 @@ import { Button } from "@deepread/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@deepread/ui/components/card";
 import { Skeleton } from "@deepread/ui/components/skeleton";
 import { cn } from "@deepread/ui/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ChevronLeft, ChevronRight, FileText } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { AlertCircle, ArchiveRestore, ChevronLeft, ChevronRight, CircleOff, FileText, Send } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { toast } from "sonner";
 
-import { trpc } from "@/utils/trpc";
+import { queryClient, trpc } from "@/utils/trpc";
 
 import {
   AdminPageHeader,
@@ -21,7 +22,7 @@ import {
   getAdminDifficultyClass,
 } from "./admin-ui";
 
-type PaperStatusFilter = "" | "pending" | "published" | "rejected";
+type PaperStatusFilter = "" | "pending" | "needs_review" | "published" | "rejected" | "inactive";
 type DifficultyFilter = "" | "beginner_friendly" | "moderate" | "difficult" | "expert";
 
 const difficultyOptions: Array<{ value: DifficultyFilter; label: string }> = [
@@ -48,6 +49,66 @@ export default function PaperMonitor() {
     }),
   );
 
+  const invalidatePaperStatusData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: trpc.admin.papers.list.queryKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.admin.dashboard.getOverview.queryKey(), refetchType: "none" }),
+      queryClient.invalidateQueries({ queryKey: trpc.categories.list.queryKey(), refetchType: "none" }),
+      queryClient.invalidateQueries({ queryKey: trpc.papers.list.queryKey(), refetchType: "none" }),
+      queryClient.invalidateQueries({ queryKey: trpc.papers.detail.queryKey(), refetchType: "none" }),
+      queryClient.invalidateQueries({ queryKey: trpc.bookmark.list.queryKey(), refetchType: "none" }),
+      queryClient.invalidateQueries({ queryKey: trpc.notes.listMineGroupedByPaper.queryKey(), refetchType: "none" }),
+      queryClient.invalidateQueries({ queryKey: trpc.profile.getOverview.queryKey(), refetchType: "none" }),
+      queryClient.invalidateQueries({ queryKey: trpc.statistics.getMine.queryKey(), refetchType: "none" }),
+    ]);
+  };
+  const deactivatePaper = useMutation(
+    trpc.admin.papers.deactivate.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Paper deactivated");
+        await invalidatePaperStatusData();
+      },
+      onError: (error) => toast.error(error.message),
+    }),
+  );
+  const reactivatePaper = useMutation(
+    trpc.admin.papers.reactivate.mutationOptions({
+      onSuccess: async (result) => {
+        toast.success(result.status === "published" ? "Paper reactivated and published" : "Paper moved to needs review");
+        await invalidatePaperStatusData();
+      },
+      onError: (error) => toast.error(error.message),
+    }),
+  );
+  const publishPaper = useMutation(
+    trpc.admin.papers.publish.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Paper published");
+        await invalidatePaperStatusData();
+      },
+      onError: (error) => toast.error(error.message),
+    }),
+  );
+  const statusMutationPending = deactivatePaper.isPending || reactivatePaper.isPending || publishPaper.isPending;
+
+  const confirmDeactivate = (paperId: string) => {
+    if (window.confirm("Deactivate this paper? It will no longer be visible in the public library.")) {
+      deactivatePaper.mutate({ paperId });
+    }
+  };
+
+  const confirmReactivate = (paperId: string) => {
+    if (window.confirm("Reactivate this paper? Classified papers will be published; otherwise they will need review.")) {
+      reactivatePaper.mutate({ paperId });
+    }
+  };
+
+  const confirmPublish = (paperId: string) => {
+    if (window.confirm("Publish this paper to the public library?")) {
+      publishPaper.mutate({ paperId });
+    }
+  };
+
   const updateStatus = (value: PaperStatusFilter) => {
     setStatus(value);
     setPage(1);
@@ -68,7 +129,7 @@ export default function PaperMonitor() {
       <Card className="rounded-lg border-border/80 shadow-sm">
         <CardHeader className="gap-1"><CardTitle className="flex items-center gap-2 text-lg"><FileText className="text-primary" />Filters</CardTitle><p className="text-sm leading-6 text-muted-foreground">Results are limited to 20 papers per page.</p></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
-          <label className={adminInputLabelClass}>Status<select className={adminSelectClassName} onChange={(event) => updateStatus(event.target.value as PaperStatusFilter)} value={status}><option value="">All statuses</option><option value="published">Published</option><option value="pending">Pending</option><option value="rejected">Rejected</option></select></label>
+          <label className={adminInputLabelClass}>Status<select className={adminSelectClassName} onChange={(event) => updateStatus(event.target.value as PaperStatusFilter)} value={status}><option value="">All statuses</option><option value="published">Published</option><option value="pending">Pending</option><option value="needs_review">Needs Review</option><option value="rejected">Rejected</option><option value="inactive">Inactive</option></select></label>
           <label className={adminInputLabelClass}>Category<select className={adminSelectClassName} disabled={categories.isLoading} onChange={(event) => updateCategory(event.target.value)} value={categoryId}><option value="">All categories</option>{categories.data?.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
           <label className={adminInputLabelClass}>Difficulty<select className={adminSelectClassName} onChange={(event) => updateDifficulty(event.target.value as DifficultyFilter)} value={difficulty}>{difficultyOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         </CardContent>
@@ -96,6 +157,25 @@ export default function PaperMonitor() {
                     <span>Created {formatAdminDate(paper.createdAt)}</span>
                     <span>Updated {formatAdminDate(paper.updatedAt)}</span>
                   </div>
+                  {paper.status === "published" || paper.status === "needs_review" || paper.status === "inactive" ? (
+                    <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                      {paper.status === "published" ? (
+                        <Button disabled={statusMutationPending} onClick={() => confirmDeactivate(paper.id)} size="sm" variant="outline"><CircleOff />Deactivate</Button>
+                      ) : null}
+                      {paper.status === "needs_review" && paper.hasValidClassification ? (
+                        <Button disabled={statusMutationPending} onClick={() => confirmPublish(paper.id)} size="sm"><Send />Publish</Button>
+                      ) : null}
+                      {paper.status === "needs_review" ? (
+                        <Button disabled={statusMutationPending} onClick={() => confirmDeactivate(paper.id)} size="sm" variant="outline"><CircleOff />Deactivate</Button>
+                      ) : null}
+                      {paper.status === "inactive" ? (
+                        <Button disabled={statusMutationPending} onClick={() => confirmReactivate(paper.id)} size="sm" variant="outline"><ArchiveRestore />Reactivate</Button>
+                      ) : null}
+                      {paper.status === "needs_review" && !paper.hasValidClassification ? (
+                        <span className="text-xs text-muted-foreground">A valid classification is required before publication.</span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>

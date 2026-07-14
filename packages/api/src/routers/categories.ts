@@ -14,7 +14,11 @@ export const categoriesRouter = router({
         description: true,
         _count: {
           select: {
-            papers: true,
+            papers: {
+              where: {
+                status: "published",
+              },
+            },
           },
         },
       },

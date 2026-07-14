@@ -3,7 +3,7 @@
 import { Button } from "@deepread/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@deepread/ui/components/card";
 import { Skeleton } from "@deepread/ui/components/skeleton";
-import { AlertCircle, CheckCircle2, Database, FileCheck2, FileClock, FileText, FileX2, FolderKanban } from "lucide-react";
+import { AlertCircle, CheckCircle2, CircleOff, Database, FileCheck2, FileClock, FileSearch2, FileText, FileX2, FolderKanban } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -55,11 +55,13 @@ export default function AdminOverview() {
 
       <section className="grid gap-4">
         <h2 className="text-lg font-semibold">Paper Status</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <AdminMetricCard icon={FileText} label="Total papers" value={paperStatusSummary.totalPapers} />
           <AdminMetricCard icon={FileCheck2} label="Published" value={paperStatusSummary.publishedPapers} />
           <AdminMetricCard icon={FileClock} label="Pending" value={paperStatusSummary.pendingPapers} />
+          <AdminMetricCard icon={FileSearch2} label="Needs review" value={paperStatusSummary.needsReviewPapers} />
           <AdminMetricCard icon={FileX2} label="Rejected" value={paperStatusSummary.rejectedPapers} />
+          <AdminMetricCard icon={CircleOff} label="Inactive" value={paperStatusSummary.inactivePapers} />
         </div>
       </section>
 
