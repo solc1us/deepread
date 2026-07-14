@@ -1,7 +1,15 @@
 import { env } from "@deepread/env/server";
 
-const DEFAULT_OPENALEX_WORKS_LIMIT = 10;
-const MAX_OPENALEX_WORKS_LIMIT = 50;
+import {
+  OPENALEX_INGESTION_DEFAULT_LIMIT,
+  OPENALEX_INGESTION_MIN_LIMIT,
+  OPENALEX_REQUEST_MAX_LIMIT,
+} from "../openalex-ingestion-limits";
+import {
+  buildOpenAlexWorkUrl,
+  normalizeDoi,
+  normalizeOpenAlexId,
+} from "./openalex-identifiers";
 
 export interface OpenAlexAuthor {
   id?: string;
@@ -64,6 +72,7 @@ export interface BuildOpenAlexWorksUrlOptions {
   search?: string;
   limit?: number;
   perPage?: number;
+  page?: number;
   openAccessOnly?: boolean;
   hasAbstractOnly?: boolean;
   articleOnly?: boolean;
@@ -90,13 +99,16 @@ export interface NormalizedOpenAlexPaper {
 }
 
 function normalizeLimit(limit?: number) {
-  const rawLimit = limit ?? DEFAULT_OPENALEX_WORKS_LIMIT;
+  const rawLimit = limit ?? OPENALEX_INGESTION_DEFAULT_LIMIT;
 
   if (!Number.isFinite(rawLimit)) {
-    return DEFAULT_OPENALEX_WORKS_LIMIT;
+    return OPENALEX_INGESTION_DEFAULT_LIMIT;
   }
 
-  return Math.min(Math.max(Math.trunc(rawLimit), 1), MAX_OPENALEX_WORKS_LIMIT);
+  return Math.min(
+    Math.max(Math.trunc(rawLimit), OPENALEX_INGESTION_MIN_LIMIT),
+    OPENALEX_REQUEST_MAX_LIMIT,
+  );
 }
 
 function cleanString(value: string | null | undefined) {
@@ -135,15 +147,13 @@ function cleanAbstractText(value: string) {
 }
 
 function normalizeDoiUrl(doi: string | null | undefined) {
-  const cleanedDoi = cleanString(doi);
+  const cleanedDoi = normalizeDoi(doi);
 
   if (!cleanedDoi) {
     return null;
   }
 
-  return cleanedDoi.startsWith("http://") || cleanedDoi.startsWith("https://")
-    ? cleanedDoi
-    : `https://doi.org/${cleanedDoi}`;
+  return `https://doi.org/${cleanedDoi}`;
 }
 
 export function buildOpenAlexWorksUrl(options: BuildOpenAlexWorksUrlOptions = {}) {
@@ -152,6 +162,10 @@ export function buildOpenAlexWorksUrl(options: BuildOpenAlexWorksUrlOptions = {}
   const filters: string[] = [];
 
   url.searchParams.set("per-page", String(normalizeLimit(options.limit ?? options.perPage)));
+
+  if (options.page && Number.isInteger(options.page) && options.page > 0) {
+    url.searchParams.set("page", String(options.page));
+  }
 
   const query = cleanString(options.query) ?? cleanString(options.search);
   if (query) {
@@ -212,7 +226,7 @@ export function reconstructOpenAlexAbstract(invertedIndex: OpenAlexWork["abstrac
 }
 
 export function normalizeOpenAlexWork(work: OpenAlexWork): NormalizedOpenAlexPaper | null {
-  const openAlexId = cleanString(work.id);
+  const openAlexId = normalizeOpenAlexId(work.id);
   const title = cleanString(work.display_name) ?? cleanString(work.title);
   const abstract = reconstructOpenAlexAbstract(work.abstract_inverted_index);
 
@@ -227,7 +241,7 @@ export function normalizeOpenAlexWork(work: OpenAlexWork): NormalizedOpenAlexPap
     cleanString(primaryLocation?.landing_page_url) ??
     cleanString(bestOaLocation?.landing_page_url) ??
     cleanString(work.locations?.find((location) => cleanString(location.landing_page_url))?.landing_page_url) ??
-    openAlexId;
+    buildOpenAlexWorkUrl(openAlexId);
   const pdfUrl =
     cleanString(bestOaLocation?.pdf_url) ??
     cleanString(primaryLocation?.pdf_url) ??
@@ -239,7 +253,7 @@ export function normalizeOpenAlexWork(work: OpenAlexWork): NormalizedOpenAlexPap
     abstract,
     authors: uniqueStrings(work.authorships?.map((authorship) => authorship.author?.display_name) ?? []),
     publicationYear: work.publication_year ?? null,
-    doi: cleanString(work.doi),
+    doi: normalizeDoi(work.doi),
     sourceName: cleanString(primaryLocation?.source?.display_name) ?? cleanString(bestOaLocation?.source?.display_name),
     sourceUrl,
     pdfUrl,

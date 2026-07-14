@@ -1,5 +1,10 @@
 "use client";
 
+import {
+	OPENALEX_INGESTION_DEFAULT_LIMIT,
+	OPENALEX_INGESTION_MAX_LIMIT,
+	OPENALEX_INGESTION_MIN_LIMIT,
+} from "@deepread/api/openalex-ingestion-limits";
 import { Button } from "@deepread/ui/components/button";
 import {
 	Card,
@@ -46,21 +51,128 @@ type ClassificationBatchResult = {
 	errors?: string[];
 };
 
-function parseLimit(value: string) {
-	const parsed = Number(value);
-	return Number.isInteger(parsed) && parsed >= 1 && parsed <= 50
-		? parsed
-		: null;
+type ValidationIssue = {
+	message?: unknown;
+	path?: unknown;
+};
+
+const genericIngestionError = "OpenAlex ingestion failed. Please try again.";
+const ingestionLimitError = `Limit must be between ${OPENALEX_INGESTION_MIN_LIMIT} and ${OPENALEX_INGESTION_MAX_LIMIT}.`;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function toValidationIssues(value: unknown): ValidationIssue[] {
+	if (Array.isArray(value)) {
+		return value.filter(isRecord);
+	}
+
+	if (isRecord(value) && Array.isArray(value.issues)) {
+		return value.issues.filter(isRecord);
+	}
+
+	return [];
+}
+
+function getValidationIssues(error: unknown) {
+	if (isRecord(error) && isRecord(error.data) && isRecord(error.data.zodError)) {
+		const issues = toValidationIssues(error.data.zodError);
+		if (issues.length > 0) {
+			return issues;
+		}
+	}
+
+	const message = error instanceof Error ? error.message : "";
+
+	try {
+		return toValidationIssues(JSON.parse(message));
+	} catch {
+		return [];
+	}
+}
+
+function getIngestionErrorMessage(error: unknown) {
+	const issues = getValidationIssues(error);
+
+	for (const issue of issues) {
+		const path = Array.isArray(issue.path) ? issue.path.map(String) : [];
+
+		if (path.includes("limit")) {
+			return ingestionLimitError;
+		}
+		if (path.includes("query")) {
+			return "Search query is required.";
+		}
+		if (path.includes("categoryId")) {
+			return "Choose a valid category.";
+		}
+	}
+
+	const message = error instanceof Error ? error.message : "";
+	if (message.includes("Limit must be between")) {
+		return ingestionLimitError;
+	}
+	if (message.includes("Search query is required")) {
+		return "Search query is required.";
+	}
+
+	return genericIngestionError;
+}
+
+function getIngestionResultErrorMessage(message: string) {
+	const safeMessagePatterns = [
+		/^OpenAlex request failed (?:on|while)/,
+		/^Existing-paper checks could not be completed\.$/,
+		/^OpenAlex work W\d+ could not be saved\.$/,
+		/^OpenAlex ingestion failed unexpectedly\.$/,
+	];
+
+	return safeMessagePatterns.some((pattern) => pattern.test(message))
+		? message
+		: genericIngestionError;
+}
+
+function parseIntegerLimit(value: string, min: number, max: number) {
+	const normalized = value.trim();
+
+	if (!/^\d+$/.test(normalized)) {
+		return null;
+	}
+
+	const parsed = Number(normalized);
+	return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : null;
+}
+
+function AnimatedEllipsis() {
+	return (
+		<span
+			aria-hidden="true"
+			className="ingestion-ellipsis inline-flex w-[1.5em] justify-start"
+		>
+			<span>.</span>
+			<span>.</span>
+			<span>.</span>
+		</span>
+	);
+}
+
+function Spinner() {
+	return (
+		<span
+			aria-hidden="true"
+			className="size-4 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
+		/>
+	);
 }
 
 export default function PipelineControls() {
 	const categories = useQuery(trpc.categories.list.queryOptions());
-	const queryPresets = useQuery(
-		trpc.admin.ingestion.getQueryPresets.queryOptions(),
-	);
 	const [ingestionCategoryId, setIngestionCategoryId] = useState("");
-	const [ingestionPresetQuery, setIngestionPresetQuery] = useState("");
-	const [ingestionLimit, setIngestionLimit] = useState("10");
+	const [ingestionQuery, setIngestionQuery] = useState("");
+	const [ingestionLimit, setIngestionLimit] = useState(
+		String(OPENALEX_INGESTION_DEFAULT_LIMIT),
+	);
 	const [ingestionResult, setIngestionResult] =
 		useState<IngestionControlResult | null>(null);
 	const [ingestionError, setIngestionError] = useState<string | null>(null);
@@ -71,10 +183,6 @@ export default function PipelineControls() {
 	const [classificationError, setClassificationError] = useState<string | null>(
 		null,
 	);
-	const selectedPreset = queryPresets.data?.presets.find(
-		(preset) => preset.query === ingestionPresetQuery,
-	);
-
 	const invalidateAdminData = async () => {
 		await Promise.all([
 			queryClient.invalidateQueries({
@@ -90,14 +198,14 @@ export default function PipelineControls() {
 	};
 	const runIngestion = useMutation(
 		trpc.admin.ingestion.runOpenAlex.mutationOptions({
-			onSuccess: async (result) => {
+			onSuccess: (result) => {
 				setIngestionResult(result);
 				setIngestionError(null);
-				await invalidateAdminData();
+				void invalidateAdminData();
 			},
 			onError: (error) => {
 				setIngestionResult(null);
-				setIngestionError(error.message);
+				setIngestionError(getIngestionErrorMessage(error));
 			},
 		}),
 	);
@@ -116,36 +224,44 @@ export default function PipelineControls() {
 	);
 
 	const handleRunIngestion = () => {
-		const limit = parseLimit(ingestionLimit);
+		if (runIngestion.isPending) {
+			return;
+		}
+
+		const query = ingestionQuery.trim();
+		const limit = parseIntegerLimit(
+			ingestionLimit,
+			OPENALEX_INGESTION_MIN_LIMIT,
+			OPENALEX_INGESTION_MAX_LIMIT,
+		);
 
 		if (!ingestionCategoryId) {
 			setIngestionResult(null);
 			setIngestionError("Choose a category before running ingestion.");
 			return;
 		}
-		if (!selectedPreset) {
+		if (!query) {
 			setIngestionResult(null);
-			setIngestionError(
-				"Choose an OpenAlex query preset before running ingestion.",
-			);
+			setIngestionError("Search query is required.");
 			return;
 		}
 		if (!limit) {
 			setIngestionResult(null);
-			setIngestionError("Limit must be a number between 1 and 50.");
+			setIngestionError(ingestionLimitError);
 			return;
 		}
 
+		setIngestionResult(null);
 		setIngestionError(null);
 		runIngestion.mutate({
 			categoryId: ingestionCategoryId,
-			query: selectedPreset.query,
+			query,
 			limit,
 		});
 	};
 
 	const handleRunClassificationBatch = () => {
-		const limit = parseLimit(classificationLimit);
+		const limit = parseIntegerLimit(classificationLimit, 1, 50);
 
 		if (!limit) {
 			setClassificationResult(null);
@@ -181,7 +297,7 @@ export default function PipelineControls() {
 						</p>
 					</CardHeader>
 					<CardContent className="grid gap-4">
-						<div className="grid gap-3 md:grid-cols-[1fr_1fr_7rem]">
+						<div className="grid gap-3 md:grid-cols-[1fr_1.4fr_7rem]">
 							<label className={adminInputLabelClass}>
 								Category
 								<select
@@ -201,50 +317,31 @@ export default function PipelineControls() {
 								</select>
 							</label>
 							<label className={adminInputLabelClass}>
-								Query preset
-								<select
-									className={adminSelectClassName}
-									disabled={queryPresets.isLoading || runIngestion.isPending}
-									onChange={(event) =>
-										setIngestionPresetQuery(event.target.value)
-									}
-									value={ingestionPresetQuery}
-								>
-									<option value="">Select preset</option>
-									{queryPresets.data?.presets.map((preset) => (
-										<option key={preset.query} value={preset.query}>
-											{preset.label}
-										</option>
-									))}
-								</select>
+								Search query
+								<Input
+									disabled={runIngestion.isPending}
+									onChange={(event) => setIngestionQuery(event.target.value)}
+									placeholder="e.g. student learning"
+									type="text"
+									value={ingestionQuery}
+								/>
 							</label>
 							<label className={adminInputLabelClass}>
 								Limit
 								<Input
 									disabled={runIngestion.isPending}
-									max={50}
-									min={1}
+									max={OPENALEX_INGESTION_MAX_LIMIT}
+									min={OPENALEX_INGESTION_MIN_LIMIT}
 									onChange={(event) => setIngestionLimit(event.target.value)}
 									type="number"
+									step={1}
 									value={ingestionLimit}
 								/>
 							</label>
 						</div>
-						{ingestionPresetQuery ? (
-							<p className="text-xs leading-5 text-muted-foreground">
-								Query: {ingestionPresetQuery}. Recommended category:{" "}
-								{selectedPreset?.recommendedCategory ?? "Not available"}.
-							</p>
-						) : null}
 						{categories.isError ? (
 							<p className="rounded-md bg-destructive/10 p-2 text-xs leading-5 text-destructive">
 								Categories could not be loaded. Refresh before running
-								ingestion.
-							</p>
-						) : null}
-						{queryPresets.isError ? (
-							<p className="rounded-md bg-destructive/10 p-2 text-xs leading-5 text-destructive">
-								Query presets could not be loaded. Refresh before running
 								ingestion.
 							</p>
 						) : null}
@@ -254,9 +351,9 @@ export default function PipelineControls() {
 							</p>
 						) : null}
 						{ingestionResult ? (
-							<div className="grid gap-2 rounded-md border border-border/80 bg-background p-3 text-xs">
+							<section className="grid gap-3 border-t pt-4 text-sm">
 								<div className="flex flex-wrap items-center justify-between gap-2">
-									<span className="font-medium">Last ingestion result</span>
+									<h3 className="font-medium">Last ingestion result</h3>
 									<span
 										className={cn(
 											"rounded-md px-2.5 py-1 font-medium capitalize",
@@ -266,38 +363,58 @@ export default function PipelineControls() {
 										{formatAdminStatus(ingestionResult.status)}
 									</span>
 								</div>
-								<div className="grid gap-1 text-muted-foreground sm:grid-cols-3">
-									<span>Fetched {ingestionResult.totalFetched}</span>
-									<span>Saved {ingestionResult.totalSaved}</span>
-									<span>Rejected {ingestionResult.totalRejected}</span>
-								</div>
-								<div className="grid gap-1 text-muted-foreground sm:grid-cols-2">
-									<span>Duplicates {ingestionResult.skipped.duplicates}</span>
-									<span>Invalid {ingestionResult.skipped.invalid}</span>
-								</div>
+								<dl className="divide-y divide-border/70 border-y border-border/70">
+									{[
+										["Fetched", ingestionResult.totalFetched],
+										["Saved", ingestionResult.totalSaved],
+										["Duplicates", ingestionResult.skipped.duplicates],
+										["Invalid", ingestionResult.skipped.invalid],
+									].map(([label, value]) => (
+										<div className="flex items-center justify-between gap-4 py-2" key={label}>
+											<dt className="text-muted-foreground">{label}</dt>
+											<dd className="font-medium tabular-nums">{value}</dd>
+										</div>
+									))}
+								</dl>
 								{ingestionResult.errors?.length ? (
-									<div className="grid gap-1 text-destructive">
-										{ingestionResult.errors.slice(0, 3).map((error) => (
-											<span key={error}>{error}</span>
+									<div className="grid gap-1 text-xs leading-5 text-destructive">
+										{ingestionResult.errors.map((error) => (
+											<span key={error}>{getIngestionResultErrorMessage(error)}</span>
 										))}
 									</div>
 								) : null}
-							</div>
+							</section>
 						) : null}
 						<Button
-							className="w-fit"
-							disabled={
-								runIngestion.isPending ||
-								categories.isLoading ||
-								queryPresets.isLoading
-							}
+							aria-busy={runIngestion.isPending}
+							aria-live="polite"
+							className="min-w-48 disabled:opacity-70"
+							disabled={runIngestion.isPending || categories.isLoading}
 							onClick={handleRunIngestion}
 							type="button"
 						>
-							{runIngestion.isPending
-								? "Running ingestion..."
-								: "Run OpenAlex Ingestion"}
+							{runIngestion.isPending ? (
+								<span className="inline-flex items-center gap-1.5">
+									<Spinner />
+									Running ingestion
+									<AnimatedEllipsis />
+								</span>
+							) : (
+								"Run OpenAlex Ingestion"
+							)}
 						</Button>
+						{runIngestion.isPending ? (
+							<p
+								aria-busy="true"
+								aria-live="polite"
+								className="text-xs leading-5 text-muted-foreground"
+								role="status"
+							>
+								Fetching and processing OpenAlex papers. Large requests may take a
+								moment
+								<AnimatedEllipsis />
+							</p>
+						) : null}
 					</CardContent>
 				</Card>
 

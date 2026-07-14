@@ -2,12 +2,25 @@ import prisma from "@deepread/db";
 import { z } from "zod";
 
 import { adminProcedure, router } from "../../index";
+import {
+  OPENALEX_INGESTION_DEFAULT_LIMIT,
+  OPENALEX_INGESTION_MAX_LIMIT,
+  OPENALEX_INGESTION_MIN_LIMIT,
+} from "../../openalex-ingestion-limits";
 import { runOpenAlexIngestion } from "../../services/openalex-ingestion";
+
+const ingestionLimitMessage =
+  `Limit must be between ${OPENALEX_INGESTION_MIN_LIMIT} and ${OPENALEX_INGESTION_MAX_LIMIT}.`;
 
 const adminIngestionInputSchema = z.object({
   categoryId: z.string().uuid(),
-  query: z.string().trim().min(1),
-  limit: z.number().int().min(1).max(50).default(10),
+  query: z.string().trim().min(1, "Search query is required."),
+  limit: z.coerce
+    .number()
+    .int({ message: ingestionLimitMessage })
+    .min(OPENALEX_INGESTION_MIN_LIMIT, { message: ingestionLimitMessage })
+    .max(OPENALEX_INGESTION_MAX_LIMIT, { message: ingestionLimitMessage })
+    .default(OPENALEX_INGESTION_DEFAULT_LIMIT),
 });
 
 const ingestionLogsInputSchema = z
