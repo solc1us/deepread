@@ -1,6 +1,12 @@
 "use client";
 
 import {
+	CLASSIFICATION_BATCH_DEFAULT_LIMIT,
+	CLASSIFICATION_BATCH_LIMIT_ERROR,
+	CLASSIFICATION_BATCH_MAX_LIMIT,
+	CLASSIFICATION_BATCH_MIN_LIMIT,
+} from "@deepread/api/classification-batch-limits";
+import {
 	OPENALEX_INGESTION_DEFAULT_LIMIT,
 	OPENALEX_INGESTION_MAX_LIMIT,
 	OPENALEX_INGESTION_MIN_LIMIT,
@@ -58,6 +64,8 @@ type ValidationIssue = {
 
 const genericIngestionError = "OpenAlex ingestion failed. Please try again.";
 const ingestionLimitError = `Limit must be between ${OPENALEX_INGESTION_MIN_LIMIT} and ${OPENALEX_INGESTION_MAX_LIMIT}.`;
+const genericClassificationError =
+	"Batch classification failed. Please try again.";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
@@ -133,6 +141,28 @@ function getIngestionResultErrorMessage(message: string) {
 		: genericIngestionError;
 }
 
+function getClassificationErrorMessage(error: unknown) {
+	const issues = getValidationIssues(error);
+
+	for (const issue of issues) {
+		const path = Array.isArray(issue.path) ? issue.path.map(String) : [];
+
+		if (path.includes("limit")) {
+			return CLASSIFICATION_BATCH_LIMIT_ERROR;
+		}
+		if (path.includes("categoryId")) {
+			return "Choose a valid category.";
+		}
+	}
+
+	const message = error instanceof Error ? error.message : "";
+	if (message.includes("Limit must be between")) {
+		return CLASSIFICATION_BATCH_LIMIT_ERROR;
+	}
+
+	return genericClassificationError;
+}
+
 function parseIntegerLimit(value: string, min: number, max: number) {
 	const normalized = value.trim();
 
@@ -177,7 +207,9 @@ export default function PipelineControls() {
 		useState<IngestionControlResult | null>(null);
 	const [ingestionError, setIngestionError] = useState<string | null>(null);
 	const [classificationCategoryId, setClassificationCategoryId] = useState("");
-	const [classificationLimit, setClassificationLimit] = useState("10");
+	const [classificationLimit, setClassificationLimit] = useState(
+		String(CLASSIFICATION_BATCH_DEFAULT_LIMIT),
+	);
 	const [classificationResult, setClassificationResult] =
 		useState<ClassificationBatchResult | null>(null);
 	const [classificationError, setClassificationError] = useState<string | null>(
@@ -211,14 +243,14 @@ export default function PipelineControls() {
 	);
 	const runClassificationBatch = useMutation(
 		trpc.admin.classification.runBatch.mutationOptions({
-			onSuccess: async (result) => {
+			onSuccess: (result) => {
 				setClassificationResult(result);
 				setClassificationError(null);
-				await invalidateAdminData();
+				void invalidateAdminData();
 			},
 			onError: (error) => {
 				setClassificationResult(null);
-				setClassificationError(error.message);
+				setClassificationError(getClassificationErrorMessage(error));
 			},
 		}),
 	);
@@ -261,14 +293,23 @@ export default function PipelineControls() {
 	};
 
 	const handleRunClassificationBatch = () => {
-		const limit = parseIntegerLimit(classificationLimit, 1, 50);
-
-		if (!limit) {
-			setClassificationResult(null);
-			setClassificationError("Limit must be a number between 1 and 50.");
+		if (runClassificationBatch.isPending) {
 			return;
 		}
 
+		const limit = parseIntegerLimit(
+			classificationLimit,
+			CLASSIFICATION_BATCH_MIN_LIMIT,
+			CLASSIFICATION_BATCH_MAX_LIMIT,
+		);
+
+		if (!limit) {
+			setClassificationResult(null);
+			setClassificationError(CLASSIFICATION_BATCH_LIMIT_ERROR);
+			return;
+		}
+
+		setClassificationResult(null);
 		setClassificationError(null);
 		runClassificationBatch.mutate({
 			limit,
@@ -455,11 +496,12 @@ export default function PipelineControls() {
 								Limit
 								<Input
 									disabled={runClassificationBatch.isPending}
-									max={50}
-									min={1}
+									max={CLASSIFICATION_BATCH_MAX_LIMIT}
+									min={CLASSIFICATION_BATCH_MIN_LIMIT}
 									onChange={(event) =>
 										setClassificationLimit(event.target.value)
 									}
+									step={1}
 									type="number"
 									value={classificationLimit}
 								/>
@@ -471,34 +513,51 @@ export default function PipelineControls() {
 							</p>
 						) : null}
 						{classificationResult ? (
-							<div className="grid gap-2 rounded-md border border-border/80 bg-background p-3 text-xs">
-								<span className="font-medium">Last classification result</span>
-								<div className="grid gap-1 text-muted-foreground sm:grid-cols-2">
-									<span>Found {classificationResult.totalFound}</span>
-									<span>Classified {classificationResult.totalClassified}</span>
-									<span>Published {classificationResult.totalPublished}</span>
-									<span>Needs review {classificationResult.totalNeedsReview}</span>
-									<span>Rejected {classificationResult.totalRejected}</span>
-									<span>Failed {classificationResult.totalFailed}</span>
-								</div>
+							<section className="grid gap-3 border-t pt-4 text-sm">
+								<h3 className="font-medium">Last classification result</h3>
+								<dl className="divide-y divide-border/70 border-y border-border/70">
+									{[
+										["Found", classificationResult.totalFound],
+										["Classified", classificationResult.totalClassified],
+										["Published", classificationResult.totalPublished],
+										["Needs review", classificationResult.totalNeedsReview],
+										["Rejected", classificationResult.totalRejected],
+										["Failed", classificationResult.totalFailed],
+									].map(([label, value]) => (
+										<div
+											className="flex items-center justify-between gap-4 py-2"
+											key={label}
+										>
+											<dt className="text-muted-foreground">{label}</dt>
+											<dd className="font-medium tabular-nums">{value}</dd>
+										</div>
+									))}
+								</dl>
 								{classificationResult.errors?.length ? (
-									<div className="grid gap-1 text-destructive">
-										{classificationResult.errors.slice(0, 3).map((error) => (
-											<span key={error}>{error}</span>
-										))}
-									</div>
+									<p className="text-xs leading-5 text-destructive">
+										Some papers could not be classified. Review the result counts
+										and try again if needed.
+									</p>
 								) : null}
-							</div>
+							</section>
 						) : null}
 						<Button
-							className="w-fit"
+							aria-busy={runClassificationBatch.isPending}
+							aria-live="polite"
+							className="min-w-48 disabled:opacity-70"
 							disabled={runClassificationBatch.isPending}
 							onClick={handleRunClassificationBatch}
 							type="button"
 						>
-							{runClassificationBatch.isPending
-								? "Classifying..."
-								: "Run Batch Classification"}
+							{runClassificationBatch.isPending ? (
+								<span className="inline-flex items-center gap-1.5">
+									<Spinner />
+									Classifying
+									<AnimatedEllipsis />
+								</span>
+							) : (
+								"Run Batch Classification"
+							)}
 						</Button>
 					</CardContent>
 				</Card>

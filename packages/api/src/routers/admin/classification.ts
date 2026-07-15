@@ -1,6 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+import {
+  CLASSIFICATION_BATCH_DEFAULT_LIMIT,
+  CLASSIFICATION_BATCH_LIMIT_ERROR,
+  CLASSIFICATION_BATCH_MAX_LIMIT,
+  CLASSIFICATION_BATCH_MIN_LIMIT,
+} from "../../classification-batch-limits";
 import { adminProcedure, router } from "../../index";
 import {
   classifyPaperById,
@@ -15,7 +21,12 @@ const adminClassificationRunForPaperInputSchema = z.object({
 
 const adminClassificationRunBatchInputSchema = z
   .object({
-    limit: z.number().int().min(1).max(50).default(10),
+    limit: z.coerce
+      .number()
+      .int("Limit must be a whole number.")
+      .min(CLASSIFICATION_BATCH_MIN_LIMIT, CLASSIFICATION_BATCH_LIMIT_ERROR)
+      .max(CLASSIFICATION_BATCH_MAX_LIMIT, CLASSIFICATION_BATCH_LIMIT_ERROR)
+      .default(CLASSIFICATION_BATCH_DEFAULT_LIMIT),
     categoryId: z.string().uuid().optional(),
   })
   .optional();

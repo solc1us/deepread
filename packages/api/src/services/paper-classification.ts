@@ -1,12 +1,17 @@
 import prisma from "@deepread/db";
 
 import {
+  CLASSIFICATION_BATCH_DEFAULT_LIMIT,
+  CLASSIFICATION_BATCH_LIMIT_ERROR,
+  CLASSIFICATION_BATCH_MAX_LIMIT,
+  CLASSIFICATION_BATCH_MIN_LIMIT,
+} from "../classification-batch-limits";
+import {
   classifyPaperDifficultyV2,
   type PaperDifficultyClassification,
 } from "./paper-difficulty-classifier";
 
-const DEFAULT_CLASSIFICATION_LIMIT = 10;
-const MAX_CLASSIFICATION_LIMIT = 50;
+const CLASSIFICATION_BATCH_CONCURRENCY = 8;
 export const CLASSIFICATION_VERSION = "rule-based-v2.1.4";
 
 export class PaperClassificationServiceError extends Error {
@@ -48,13 +53,43 @@ export interface ClassifyPendingPapersResult {
 }
 
 function normalizeLimit(limit?: number) {
-  const rawLimit = limit ?? DEFAULT_CLASSIFICATION_LIMIT;
+  const rawLimit = limit ?? CLASSIFICATION_BATCH_DEFAULT_LIMIT;
 
-  if (!Number.isFinite(rawLimit)) {
-    return DEFAULT_CLASSIFICATION_LIMIT;
+  if (
+    !Number.isInteger(rawLimit) ||
+    rawLimit < CLASSIFICATION_BATCH_MIN_LIMIT ||
+    rawLimit > CLASSIFICATION_BATCH_MAX_LIMIT
+  ) {
+    throw new Error(CLASSIFICATION_BATCH_LIMIT_ERROR);
   }
 
-  return Math.min(Math.max(Math.trunc(rawLimit), 1), MAX_CLASSIFICATION_LIMIT);
+  return rawLimit;
+}
+
+async function mapWithConcurrency<T, TResult>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<TResult>,
+) {
+  const results = new Array<TResult>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      const item = items[currentIndex];
+
+      if (item !== undefined) {
+        results[currentIndex] = await worker(item);
+      }
+    }
+  }
+
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+  return results;
 }
 
 function toStringArray(value: unknown) {
@@ -267,6 +302,7 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
       id: true,
     },
   });
+  const paperIds = [...new Set(pendingPapers.map((paper) => paper.id))];
   let totalClassified = 0;
   let totalPublished = 0;
   let totalNeedsReview = 0;
@@ -275,9 +311,29 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
   const reviews: ClassifyPendingPapersResult["reviews"] = [];
   const errors: string[] = [];
 
-  for (const paper of pendingPapers) {
-    try {
-      const result = await classifyPaperById(paper.id);
+  const outcomes = await mapWithConcurrency(
+    paperIds,
+    CLASSIFICATION_BATCH_CONCURRENCY,
+    async (paperId) => {
+      try {
+        return {
+          outcome: "success",
+          paperId,
+          result: await classifyPaperById(paperId),
+        } as const;
+      } catch (error) {
+        return {
+          outcome: "failure",
+          paperId,
+          error,
+        } as const;
+      }
+    },
+  );
+
+  for (const outcome of outcomes) {
+    if (outcome.outcome === "success") {
+      const { paperId, result } = outcome;
 
       if (result.status === "published") {
         totalClassified += 1;
@@ -285,21 +341,21 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
       } else if (result.status === "needs_review") {
         totalNeedsReview += 1;
         reviews.push({
-          paperId: paper.id,
+          paperId,
           reasons: result.reviewReasons ?? [],
         });
       } else {
         totalRejected += 1;
-        errors.push(`Rejected paper ${paper.id}: ${result.rejectionReason ?? "classification could not be performed"}`);
+        errors.push(`Rejected paper ${paperId}: ${result.rejectionReason ?? "classification could not be performed"}`);
       }
-    } catch (error) {
+    } else {
       totalFailed += 1;
-      errors.push(`Failed to classify paper ${paper.id}: ${getErrorMessage(error)}`);
+      errors.push(`Failed to classify paper ${outcome.paperId}: ${getErrorMessage(outcome.error)}`);
     }
   }
 
   return {
-    totalFound: pendingPapers.length,
+    totalFound: paperIds.length,
     totalClassified,
     totalPublished,
     totalNeedsReview,
