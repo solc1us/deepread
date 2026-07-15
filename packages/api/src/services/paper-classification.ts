@@ -1,4 +1,5 @@
 import prisma from "@deepread/db";
+import { env } from "@deepread/env/server";
 
 import {
   CLASSIFICATION_BATCH_DEFAULT_LIMIT,
@@ -10,6 +11,7 @@ import {
   classifyPaperDifficultyV2,
   type PaperDifficultyClassification,
 } from "./paper-difficulty-classifier";
+import { BackendProfiler, formatProfileSummary } from "./backend-profiler";
 
 const CLASSIFICATION_BATCH_CONCURRENCY = 8;
 export const CLASSIFICATION_VERSION = "rule-based-v2.1.4";
@@ -146,7 +148,26 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-export async function classifyPaperById(paperId: string): Promise<ClassifyPaperByIdResult> {
+function runProfiledSync<TResult>(
+  profiler: BackendProfiler | undefined,
+  name: string,
+  operation: () => TResult,
+) {
+  return profiler ? profiler.measureSync(name, operation) : operation();
+}
+
+function runProfiled<TResult>(
+  profiler: BackendProfiler | undefined,
+  name: string,
+  operation: () => Promise<TResult>,
+) {
+  return profiler ? profiler.measure(name, operation) : operation();
+}
+
+async function classifyPaperByIdWithProfiler(
+  paperId: string,
+  profiler?: BackendProfiler,
+): Promise<ClassifyPaperByIdResult> {
   const paper = await prisma.paper.findUnique({
     where: {
       id: paperId,
@@ -178,17 +199,19 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
   const validationError = getValidationError(paper);
 
   if (validationError) {
-    await prisma.paper.update({
-      where: {
-        id: paper.id,
-        status: {
-          not: "inactive",
+    await runProfiled(profiler, "database_write_per_paper", () =>
+      prisma.paper.update({
+        where: {
+          id: paper.id,
+          status: {
+            not: "inactive",
+          },
         },
-      },
-      data: {
-        status: "rejected",
-      },
-    });
+        data: {
+          status: "rejected",
+        },
+      }),
+    );
 
     return {
       paperId: paper.id,
@@ -200,27 +223,31 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
   let classifierResult: ReturnType<typeof classifyPaperDifficultyV2>;
 
   try {
-    classifierResult = classifyPaperDifficultyV2({
-      title: paper.title,
-      abstract: paper.abstract,
-      keywords: toStringArray(paper.keywords),
-      categoryName: paper.category.name,
-      publicationYear: paper.publicationYear,
-    });
+    classifierResult = runProfiledSync(profiler, "classifier_per_paper", () =>
+      classifyPaperDifficultyV2({
+        title: paper.title,
+        abstract: paper.abstract,
+        keywords: toStringArray(paper.keywords),
+        categoryName: paper.category.name,
+        publicationYear: paper.publicationYear,
+      }),
+    );
   } catch (error) {
     const rejectionReason = `Classification could not be performed: ${getErrorMessage(error)}`;
 
-    await prisma.paper.update({
-      where: {
-        id: paper.id,
-        status: {
-          not: "inactive",
+    await runProfiled(profiler, "database_write_per_paper", () =>
+      prisma.paper.update({
+        where: {
+          id: paper.id,
+          status: {
+            not: "inactive",
+          },
         },
-      },
-      data: {
-        status: "rejected",
-      },
-    });
+        data: {
+          status: "rejected",
+        },
+      }),
+    );
 
     return {
       paperId: paper.id,
@@ -230,17 +257,19 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
   }
 
   if (classifierResult.outcome === "needs_review") {
-    await prisma.paper.update({
-      where: {
-        id: paper.id,
-        status: {
-          not: "inactive",
+    await runProfiled(profiler, "database_write_per_paper", () =>
+      prisma.paper.update({
+        where: {
+          id: paper.id,
+          status: {
+            not: "inactive",
+          },
         },
-      },
-      data: {
-        status: "needs_review",
-      },
-    });
+        data: {
+          status: "needs_review",
+        },
+      }),
+    );
 
     return {
       paperId: paper.id,
@@ -255,29 +284,31 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
     classifierResult.classificationVersion,
   );
 
-  await prisma.$transaction([
-    prisma.paperClassification.upsert({
-      where: {
-        paperId: paper.id,
-      },
-      update: classificationData,
-      create: {
-        paperId: paper.id,
-        ...classificationData,
-      },
-    }),
-    prisma.paper.update({
-      where: {
-        id: paper.id,
-        status: {
-          not: "inactive",
+  await runProfiled(profiler, "database_write_per_paper", () =>
+    prisma.$transaction([
+      prisma.paperClassification.upsert({
+        where: {
+          paperId: paper.id,
         },
-      },
-      data: {
-        status: "published",
-      },
-    }),
-  ]);
+        update: classificationData,
+        create: {
+          paperId: paper.id,
+          ...classificationData,
+        },
+      }),
+      prisma.paper.update({
+        where: {
+          id: paper.id,
+          status: {
+            not: "inactive",
+          },
+        },
+        data: {
+          status: "published",
+        },
+      }),
+    ]),
+  );
 
   return {
     paperId: paper.id,
@@ -287,22 +318,13 @@ export async function classifyPaperById(paperId: string): Promise<ClassifyPaperB
   };
 }
 
+export async function classifyPaperById(paperId: string): Promise<ClassifyPaperByIdResult> {
+  return await classifyPaperByIdWithProfiler(paperId);
+}
+
 export async function classifyPendingPapers(input: ClassifyPendingPapersInput = {}): Promise<ClassifyPendingPapersResult> {
-  const limit = normalizeLimit(input.limit);
-  const pendingPapers = await prisma.paper.findMany({
-    where: {
-      status: "pending",
-      ...(input.categoryId ? { categoryId: input.categoryId } : {}),
-    },
-    orderBy: {
-      createdAt: "asc",
-    },
-    take: limit,
-    select: {
-      id: true,
-    },
-  });
-  const paperIds = [...new Set(pendingPapers.map((paper) => paper.id))];
+  const profiler = env.CLASSIFICATION_PROFILING ? new BackendProfiler() : undefined;
+  let totalFound = 0;
   let totalClassified = 0;
   let totalPublished = 0;
   let totalNeedsReview = 0;
@@ -310,58 +332,105 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
   let totalFailed = 0;
   const reviews: ClassifyPendingPapersResult["reviews"] = [];
   const errors: string[] = [];
+  let profileStatus: "success" | "partial" | "failed" = "failed";
 
-  const outcomes = await mapWithConcurrency(
-    paperIds,
-    CLASSIFICATION_BATCH_CONCURRENCY,
-    async (paperId) => {
-      try {
-        return {
-          outcome: "success",
-          paperId,
-          result: await classifyPaperById(paperId),
-        } as const;
-      } catch (error) {
-        return {
-          outcome: "failure",
-          paperId,
-          error,
-        } as const;
-      }
-    },
-  );
+  try {
+    const limit = normalizeLimit(input.limit);
+    const fetchPendingPapers = () =>
+      prisma.paper.findMany({
+        where: {
+          status: "pending" as const,
+          ...(input.categoryId ? { categoryId: input.categoryId } : {}),
+        },
+        orderBy: {
+          createdAt: "asc" as const,
+        },
+        take: limit,
+        select: {
+          id: true,
+        },
+      });
+    const pendingPapers = await runProfiled(profiler, "database_fetch", fetchPendingPapers);
+    const paperIds = [...new Set(pendingPapers.map((paper) => paper.id))];
+    totalFound = paperIds.length;
 
-  for (const outcome of outcomes) {
-    if (outcome.outcome === "success") {
-      const { paperId, result } = outcome;
+    const outcomes = await mapWithConcurrency(
+      paperIds,
+      CLASSIFICATION_BATCH_CONCURRENCY,
+      async (paperId) => {
+        try {
+          return {
+            outcome: "success",
+            paperId,
+            result: await classifyPaperByIdWithProfiler(paperId, profiler),
+          } as const;
+        } catch (error) {
+          return {
+            outcome: "failure",
+            paperId,
+            error,
+          } as const;
+        }
+      },
+    );
 
-      if (result.status === "published") {
-        totalClassified += 1;
-        totalPublished += 1;
-      } else if (result.status === "needs_review") {
-        totalNeedsReview += 1;
-        reviews.push({
-          paperId,
-          reasons: result.reviewReasons ?? [],
-        });
+    for (const outcome of outcomes) {
+      if (outcome.outcome === "success") {
+        const { paperId, result } = outcome;
+
+        if (result.status === "published") {
+          totalClassified += 1;
+          totalPublished += 1;
+        } else if (result.status === "needs_review") {
+          totalNeedsReview += 1;
+          reviews.push({
+            paperId,
+            reasons: result.reviewReasons ?? [],
+          });
+        } else {
+          totalRejected += 1;
+          errors.push(`Rejected paper ${paperId}: ${result.rejectionReason ?? "classification could not be performed"}`);
+        }
       } else {
-        totalRejected += 1;
-        errors.push(`Rejected paper ${paperId}: ${result.rejectionReason ?? "classification could not be performed"}`);
+        totalFailed += 1;
+        errors.push(`Failed to classify paper ${outcome.paperId}: ${getErrorMessage(outcome.error)}`);
       }
-    } else {
-      totalFailed += 1;
-      errors.push(`Failed to classify paper ${outcome.paperId}: ${getErrorMessage(outcome.error)}`);
+    }
+
+    profileStatus = totalFailed > 0 ? "partial" : "success";
+
+    return {
+      totalFound,
+      totalClassified,
+      totalPublished,
+      totalNeedsReview,
+      totalRejected,
+      totalFailed,
+      reviews,
+      errors,
+    };
+  } finally {
+    if (profiler) {
+      console.info(
+        formatProfileSummary({
+          title: "Classification Profile",
+          metadata: {
+            status: profileStatus,
+            papers_found: totalFound,
+            successful: totalFound - totalFailed,
+            failed: totalFailed,
+            needs_review: totalNeedsReview,
+            published: totalPublished,
+            concurrency: CLASSIFICATION_BATCH_CONCURRENCY,
+          },
+          snapshot: profiler.finish(),
+          metrics: [
+            { name: "database_fetch", label: "database_fetch_ms", kind: "duration" },
+            { name: "classifier_per_paper", label: "classifier_latency_ms", kind: "latency" },
+            { name: "database_write_per_paper", label: "database_write_latency_ms", kind: "latency" },
+          ],
+        }),
+      );
     }
   }
-
-  return {
-    totalFound: paperIds.length,
-    totalClassified,
-    totalPublished,
-    totalNeedsReview,
-    totalRejected,
-    totalFailed,
-    reviews,
-    errors,
-  };
 }

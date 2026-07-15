@@ -13,6 +13,14 @@ export const env = createEnv({
     ADMIN_NAME: z.string().min(1).optional(),
     OPENALEX_API_KEY: z.string().optional(),
     OPENALEX_BASE_URL: z.url().default("https://api.openalex.org"),
+    CLASSIFICATION_PROFILING: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    OPENALEX_INGESTION_PROFILING: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   },
   runtimeEnv: process.env,

@@ -1,4 +1,5 @@
 import prisma from "@deepread/db";
+import { env } from "@deepread/env/server";
 
 import {
   OPENALEX_INGESTION_DEFAULT_LIMIT,
@@ -17,6 +18,7 @@ import {
   normalizeOpenAlexId,
   OPENALEX_PROVIDER,
 } from "./openalex-identifiers";
+import { BackendProfiler, formatProfileSummary } from "./backend-profiler";
 
 const MAX_ERROR_EXAMPLES = 5;
 
@@ -95,7 +97,7 @@ function toJsonObject(value: Record<string, unknown>): JsonInputObject {
   );
 }
 
-function deduplicateFetchedWorks(works: OpenAlexWork[]) {
+function deduplicateNormalizedPapers(normalizedPapers: Array<NormalizedOpenAlexPaper | null>) {
   const papers: NormalizedOpenAlexPaper[] = [];
   const seenDois = new Set<string>();
   const seenExternalIds = new Set<string>();
@@ -103,9 +105,7 @@ function deduplicateFetchedWorks(works: OpenAlexWork[]) {
   let duplicates = 0;
   let invalid = 0;
 
-  for (const work of works) {
-    const paper = normalizeOpenAlexWork(work);
-
+  for (const paper of normalizedPapers) {
     if (!paper || !isValidNormalizedPaper(paper)) {
       invalid += 1;
       continue;
@@ -131,6 +131,18 @@ function deduplicateFetchedWorks(works: OpenAlexWork[]) {
   }
 
   return { papers, duplicates, invalid };
+}
+
+function deduplicateFetchedWorks(works: OpenAlexWork[], profiler?: BackendProfiler) {
+  const normalizeWorks = () => works.map(normalizeOpenAlexWork);
+  const normalizedPapers = profiler
+    ? profiler.measureSync("normalization", normalizeWorks)
+    : normalizeWorks();
+  const deduplicatePapers = () => deduplicateNormalizedPapers(normalizedPapers);
+
+  return profiler
+    ? profiler.measureSync("in_memory_deduplication", deduplicatePapers)
+    : deduplicatePapers();
 }
 
 function buildDoiLookupValues(dois: string[]) {
@@ -302,6 +314,7 @@ async function createIngestionLog(result: OpenAlexIngestionResult, startedAt: Da
 }
 
 export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Promise<OpenAlexIngestionResult> {
+  const profiler = env.OPENALEX_INGESTION_PROFILING ? new BackendProfiler() : undefined;
   const startedAt = new Date();
   const errors: string[] = [];
   const limit = normalizeLimit(input.limit);
@@ -310,6 +323,9 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
   let totalSaved = 0;
   let duplicateCount = 0;
   let invalidCount = 0;
+  let failedCount = 0;
+  let pagesFetched = 0;
+  let profileStatus: OpenAlexIngestionResult["status"] = "failed";
 
   const addError = (message: string) => {
     if (errors.length < MAX_ERROR_EXAMPLES && !errors.includes(message)) {
@@ -318,6 +334,7 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
   };
 
   const finish = async (status: OpenAlexIngestionResult["status"]) => {
+    profileStatus = status;
     const unaccounted = totalFetched - totalSaved - duplicateCount - invalidCount;
     if (unaccounted > 0) {
       invalidCount += unaccounted;
@@ -351,11 +368,13 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
     });
 
     if (!category) {
+      failedCount += 1;
       addError("The selected category was not found.");
       return await finish("failed");
     }
 
     if (!query) {
+      failedCount += 1;
       addError("OpenAlex search query is required.");
       return await finish("failed");
     }
@@ -368,12 +387,17 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
       const pageLimit = Math.min(OPENALEX_REQUEST_MAX_LIMIT, limit - totalFetched);
 
       try {
-        const response = await fetchOpenAlexWorks({
-          query,
-          limit: pageLimit,
-          page,
-        });
+        const fetchPage = () =>
+          fetchOpenAlexWorks({
+            query,
+            limit: pageLimit,
+            page,
+          });
+        const response = profiler
+          ? await profiler.measure("openalex_fetch", fetchPage)
+          : await fetchPage();
         const works = (response.results ?? []).slice(0, pageLimit);
+        pagesFetched += 1;
 
         if (works.length === 0) {
           break;
@@ -387,6 +411,7 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
         }
       } catch (error) {
         fetchFailed = true;
+        failedCount += 1;
         addError(getOpenAlexRequestErrorMessage(error, page));
         break;
       }
@@ -398,14 +423,18 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
       return await finish("failed");
     }
 
-    const batch = deduplicateFetchedWorks(fetchedWorks);
+    const batch = deduplicateFetchedWorks(fetchedWorks, profiler);
     duplicateCount += batch.duplicates;
     invalidCount += batch.invalid;
 
     let existing: Awaited<ReturnType<typeof findExistingDuplicateKeys>>;
     try {
-      existing = await findExistingDuplicateKeys(batch.papers);
+      const findDuplicates = () => findExistingDuplicateKeys(batch.papers);
+      existing = profiler
+        ? await profiler.measure("database_duplicate_lookup", findDuplicates)
+        : await findDuplicates();
     } catch {
+      failedCount += 1;
       invalidCount += batch.papers.length;
       addError("Existing-paper checks could not be completed.");
       return await finish("failed");
@@ -420,7 +449,12 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
       }
 
       try {
-        await saveOpenAlexPaper(paper, input.categoryId, fetchedAt);
+        const savePaper = () => saveOpenAlexPaper(paper, input.categoryId, fetchedAt);
+        if (profiler) {
+          await profiler.measure("database_write_per_paper", savePaper);
+        } else {
+          await savePaper();
+        }
         totalSaved += 1;
       } catch (error) {
         if (isIdentifierUniqueConflict(error)) {
@@ -429,6 +463,7 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
         }
 
         invalidCount += 1;
+        failedCount += 1;
         addError(`OpenAlex work ${paper.openAlexId} could not be saved.`);
       }
     }
@@ -440,7 +475,46 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
 
     return await finish(totalSaved > 0 ? "partial" : "failed");
   } catch {
+    failedCount += 1;
     addError("OpenAlex ingestion failed unexpectedly.");
     return await finish(totalSaved > 0 ? "partial" : "failed");
+  } finally {
+    if (profiler) {
+      console.info(
+        formatProfileSummary({
+          title: "OpenAlex Ingestion Profile",
+          metadata: {
+            status: profileStatus,
+            requested_limit: limit,
+            pages_fetched: pagesFetched,
+            total_fetched: totalFetched,
+            saved: totalSaved,
+            duplicates: duplicateCount,
+            invalid: invalidCount,
+            failed: failedCount,
+          },
+          snapshot: profiler.finish(),
+          metrics: [
+            { name: "openalex_fetch", label: "openalex_fetch_latency_ms", kind: "latency" },
+            { name: "normalization", label: "normalization_ms", kind: "duration" },
+            {
+              name: "in_memory_deduplication",
+              label: "in_memory_deduplication_ms",
+              kind: "duration",
+            },
+            {
+              name: "database_duplicate_lookup",
+              label: "database_duplicate_lookup_ms",
+              kind: "duration",
+            },
+            {
+              name: "database_write_per_paper",
+              label: "database_write_latency_ms",
+              kind: "latency",
+            },
+          ],
+        }),
+      );
+    }
   }
 }
