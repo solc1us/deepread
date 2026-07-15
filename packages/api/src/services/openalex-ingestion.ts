@@ -2,6 +2,7 @@ import prisma from "@deepread/db";
 import { env } from "@deepread/env/server";
 
 import {
+  OPENALEX_INGESTION_CONCURRENCY,
   OPENALEX_INGESTION_DEFAULT_LIMIT,
   OPENALEX_INGESTION_MAX_LIMIT,
   OPENALEX_INGESTION_MIN_LIMIT,
@@ -24,6 +25,11 @@ const MAX_ERROR_EXAMPLES = 5;
 
 type JsonInputValue = null | string | number | boolean | JsonInputValue[] | JsonInputObject;
 type JsonInputObject = { [key: string]: JsonInputValue };
+type SaveResult =
+  | { type: "saved" }
+  | { type: "duplicate" }
+  | { type: "invalid"; error?: string }
+  | { type: "failed"; error: string };
 
 export interface RunOpenAlexIngestionInput {
   categoryId: string;
@@ -55,6 +61,32 @@ function normalizeLimit(limit?: number) {
     Math.max(Math.trunc(rawLimit), OPENALEX_INGESTION_MIN_LIMIT),
     OPENALEX_INGESTION_MAX_LIMIT,
   );
+}
+
+async function mapWithConcurrency<T, TResult>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<TResult>,
+) {
+  const results = new Array<TResult>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      const item = items[currentIndex];
+
+      if (item !== undefined) {
+        results[currentIndex] = await worker(item);
+      }
+    }
+  }
+
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+  return results;
 }
 
 function isValidNormalizedPaper(paper: NormalizedOpenAlexPaper) {
@@ -441,6 +473,7 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
     }
 
     const fetchedAt = new Date();
+    const papersToSave: NormalizedOpenAlexPaper[] = [];
 
     for (const paper of batch.papers) {
       if (isExistingDuplicate(paper, existing)) {
@@ -448,23 +481,49 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
         continue;
       }
 
-      try {
-        const savePaper = () => saveOpenAlexPaper(paper, input.categoryId, fetchedAt);
-        if (profiler) {
-          await profiler.measure("database_write_per_paper", savePaper);
-        } else {
-          await savePaper();
-        }
-        totalSaved += 1;
-      } catch (error) {
-        if (isIdentifierUniqueConflict(error)) {
-          duplicateCount += 1;
-          continue;
-        }
+      papersToSave.push(paper);
+    }
 
+    const saveResults = await mapWithConcurrency(
+      papersToSave,
+      OPENALEX_INGESTION_CONCURRENCY,
+      async (paper): Promise<SaveResult> => {
+        try {
+          const savePaper = () => saveOpenAlexPaper(paper, input.categoryId, fetchedAt);
+          if (profiler) {
+            await profiler.measure("database_write_per_paper", savePaper);
+          } else {
+            await savePaper();
+          }
+
+          return { type: "saved" };
+        } catch (error) {
+          if (isIdentifierUniqueConflict(error)) {
+            return { type: "duplicate" };
+          }
+
+          return {
+            type: "failed",
+            error: `OpenAlex work ${paper.openAlexId} could not be saved.`,
+          };
+        }
+      },
+    );
+
+    for (const result of saveResults) {
+      if (result.type === "saved") {
+        totalSaved += 1;
+      } else if (result.type === "duplicate") {
+        duplicateCount += 1;
+      } else if (result.type === "invalid") {
+        invalidCount += 1;
+        if (result.error) {
+          addError(result.error);
+        }
+      } else {
         invalidCount += 1;
         failedCount += 1;
-        addError(`OpenAlex work ${paper.openAlexId} could not be saved.`);
+        addError(result.error);
       }
     }
 
@@ -492,6 +551,7 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
             duplicates: duplicateCount,
             invalid: invalidCount,
             failed: failedCount,
+            concurrency: OPENALEX_INGESTION_CONCURRENCY,
           },
           snapshot: profiler.finish(),
           metrics: [
