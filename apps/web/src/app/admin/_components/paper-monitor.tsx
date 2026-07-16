@@ -1,5 +1,6 @@
 "use client";
 
+import { toCategorySlug } from "@deepread/api/category-slug";
 import { Button } from "@deepread/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@deepread/ui/components/card";
 import { Skeleton } from "@deepread/ui/components/skeleton";
@@ -33,21 +34,30 @@ const difficultyOptions: Array<{ value: DifficultyFilter; label: string }> = [
   { value: "expert", label: "Expert" },
 ];
 
-export default function PaperMonitor() {
+export default function PaperMonitor({
+  initialCategorySlug = "",
+  initialDifficulty = "",
+}: {
+  initialCategorySlug?: string;
+  initialDifficulty?: DifficultyFilter;
+}) {
   const [status, setStatus] = useState<PaperStatusFilter>("");
-  const [categoryId, setCategoryId] = useState("");
-  const [difficulty, setDifficulty] = useState<DifficultyFilter>("");
+  const [categorySlug, setCategorySlug] = useState(initialCategorySlug);
+  const [difficulty, setDifficulty] = useState<DifficultyFilter>(initialDifficulty);
   const [page, setPage] = useState(1);
   const categories = useQuery(trpc.categories.list.queryOptions());
-  const papers = useQuery(
-    trpc.admin.papers.list.queryOptions({
+  const categoryId = categories.data?.find((category) => toCategorySlug(category.name) === categorySlug)?.id;
+  const categoryFilterReady = !categorySlug || categories.isSuccess;
+  const papers = useQuery({
+    ...trpc.admin.papers.list.queryOptions({
       page,
       limit: 20,
       ...(status ? { status } : {}),
       ...(categoryId ? { categoryId } : {}),
       ...(difficulty ? { difficulty } : {}),
     }),
-  );
+    enabled: categoryFilterReady,
+  });
 
   const invalidatePaperStatusData = async () => {
     await Promise.all([
@@ -114,7 +124,7 @@ export default function PaperMonitor() {
     setPage(1);
   };
   const updateCategory = (value: string) => {
-    setCategoryId(value);
+    setCategorySlug(value);
     setPage(1);
   };
   const updateDifficulty = (value: DifficultyFilter) => {
@@ -130,12 +140,12 @@ export default function PaperMonitor() {
         <CardHeader className="gap-1"><CardTitle className="flex items-center gap-2 text-lg"><FileText className="text-primary" />Filters</CardTitle><p className="text-sm leading-6 text-muted-foreground">Results are limited to 20 papers per page.</p></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
           <label className={adminInputLabelClass}>Status<select className={adminSelectClassName} onChange={(event) => updateStatus(event.target.value as PaperStatusFilter)} value={status}><option value="">All statuses</option><option value="published">Published</option><option value="pending">Pending</option><option value="needs_review">Needs Review</option><option value="rejected">Rejected</option><option value="inactive">Inactive</option></select></label>
-          <label className={adminInputLabelClass}>Category<select className={adminSelectClassName} disabled={categories.isLoading} onChange={(event) => updateCategory(event.target.value)} value={categoryId}><option value="">All categories</option>{categories.data?.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+          <label className={adminInputLabelClass}>Category<select className={adminSelectClassName} disabled={categories.isLoading} onChange={(event) => updateCategory(event.target.value)} value={categorySlug}><option value="">All categories</option>{categories.data?.map((category) => <option key={category.id} value={toCategorySlug(category.name)}>{category.name}</option>)}</select></label>
           <label className={adminInputLabelClass}>Difficulty<select className={adminSelectClassName} onChange={(event) => updateDifficulty(event.target.value as DifficultyFilter)} value={difficulty}>{difficultyOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         </CardContent>
       </Card>
 
-      {papers.isLoading ? (
+      {!categoryFilterReady || papers.isLoading ? (
         <section className="grid gap-3">{Array.from({ length: 6 }, (_, index) => <Skeleton className="h-24 rounded-lg" key={index} />)}</section>
       ) : papers.isError || !papers.data ? (
         <Card className="rounded-lg border-border/80 shadow-sm"><CardContent className="flex items-start gap-3 py-4"><AlertCircle className="mt-0.5 text-destructive" /><div className="grid gap-1"><div className="text-sm font-medium">Paper monitor unavailable</div><p className="text-sm leading-6 text-muted-foreground">Confirm your admin session and server connection.</p></div></CardContent></Card>

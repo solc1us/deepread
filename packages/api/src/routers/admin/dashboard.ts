@@ -1,5 +1,6 @@
 import prisma from "@deepread/db";
 
+import { toCategorySlug } from "../../category-slug";
 import { adminProcedure, router } from "../../index";
 
 type PaperStatusValue = "pending" | "needs_review" | "published" | "rejected" | "inactive";
@@ -61,6 +62,10 @@ export const adminDashboardRouter = router({
           difficult: 0,
           expert: 0,
         },
+        datasetOverview: {
+          totalPublished: 0,
+          categories: [],
+        },
         categoryDistribution: [],
         difficultyDistribution: difficultyLevels.map((difficultyLevel) => ({ difficultyLevel, count: 0 })),
         ingestionOverview: {
@@ -91,6 +96,7 @@ export const adminDashboardRouter = router({
       difficultyGroups,
       categories,
       categoryStatusGroups,
+      publishedDifficultyCategoryGroups,
       ingestionStatusGroups,
       lastIngestion,
       latestIngestionLogs,
@@ -128,6 +134,24 @@ export const adminDashboardRouter = router({
           _all: true,
         },
       }),
+      Promise.all(
+        difficultyLevels.map((difficultyLevel) =>
+          prisma.paper.groupBy({
+            by: ["categoryId"],
+            where: {
+              status: "published",
+              classification: {
+                is: {
+                  difficultyLevel,
+                },
+              },
+            },
+            _count: {
+              _all: true,
+            },
+          }),
+        ),
+      ),
       prisma.ingestionLog.groupBy({
         by: ["status"],
         _count: {
@@ -258,6 +282,53 @@ export const adminDashboardRouter = router({
       }
     }
 
+    const datasetCategoryCounts = new Map(
+      categories.map((category) => [
+        category.id,
+        {
+          categoryId: category.id,
+          categoryName: category.name,
+          categorySlug: toCategorySlug(category.name),
+          beginnerFriendly: 0,
+          moderate: 0,
+          difficult: 0,
+          expert: 0,
+          total: 0,
+        },
+      ]),
+    );
+
+    for (const [index, groups] of publishedDifficultyCategoryGroups.entries()) {
+      const difficultyLevel = difficultyLevels[index];
+      if (!difficultyLevel) {
+        continue;
+      }
+
+      for (const group of groups) {
+        const category = datasetCategoryCounts.get(group.categoryId);
+        if (!category) {
+          continue;
+        }
+
+        const count = group._count._all;
+        category.total += count;
+
+        if (difficultyLevel === "beginner_friendly") {
+          category.beginnerFriendly = count;
+        } else if (difficultyLevel === "moderate") {
+          category.moderate = count;
+        } else if (difficultyLevel === "difficult") {
+          category.difficult = count;
+        } else {
+          category.expert = count;
+        }
+      }
+    }
+
+    const datasetCategories = Array.from(datasetCategoryCounts.values()).sort(
+      (left, right) => right.total - left.total || left.categoryName.localeCompare(right.categoryName),
+    );
+
     const ingestionStatusCounts = countByKey(
       ingestionStatusGroups.map((group) => ({
         key: group.status as IngestionStatusValue,
@@ -285,6 +356,10 @@ export const adminDashboardRouter = router({
         moderate: difficultyCounts.get("moderate") ?? 0,
         difficult: difficultyCounts.get("difficult") ?? 0,
         expert: difficultyCounts.get("expert") ?? 0,
+      },
+      datasetOverview: {
+        totalPublished: paperStatusCounts.get("published") ?? 0,
+        categories: datasetCategories,
       },
       categoryDistribution: Array.from(categoryCounts.values()),
       difficultyDistribution: difficultyLevels.map((difficultyLevel) => ({
