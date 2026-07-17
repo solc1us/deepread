@@ -2,7 +2,7 @@
 
 import { Button } from "@deepread/ui/components/button";
 import { cn } from "@deepread/ui/lib/utils";
-import { BarChart3, BookOpen, FileCheck2, FileText, LayoutDashboard, ListRestart, LogOut, Menu, NotebookPen, UserRound, X } from "lucide-react";
+import { BarChart3, BookOpen, FileCheck2, FileText, LayoutDashboard, ListRestart, LogOut, Menu, NotebookPen, ShieldCheck, UserRound, X } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -32,6 +32,7 @@ const adminNavigation: NavigationItem[] = [
   { href: "/admin/logs", label: "Logs", icon: FileText },
   { href: "/admin/classification", label: "Classification", icon: FileCheck2 },
   { href: "/admin/papers", label: "Papers Monitor", icon: BookOpen },
+  { href: "/admin/data-quality", label: "Data Quality", icon: ShieldCheck },
 ];
 
 const adminUserNavigation: NavigationItem[] = [

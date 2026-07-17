@@ -7,6 +7,8 @@ const GENERIC_TITLE_PATTERNS = [
   /\b(?:in today's world|and the future)\s*$/,
 ];
 
+export const QUALITY_GATE_MIN_ABSTRACT_WORDS = 60;
+
 function hasGenericTitle(title: string) {
   const normalizedTitle = normalizeText(title);
   return GENERIC_TITLE_PATTERNS.some((pattern) => pattern.test(normalizedTitle));
@@ -31,7 +33,7 @@ export function runQualityGate(input: ClassifyPaperDifficultyInput): QualityGate
   if (!abstract) {
     reasons.push("Abstract is missing.");
   } else {
-    if (wordCount < 60) {
+    if (wordCount < QUALITY_GATE_MIN_ABSTRACT_WORDS) {
       reasons.push("Abstract is too short for reliable classification (fewer than 60 words).");
     }
 

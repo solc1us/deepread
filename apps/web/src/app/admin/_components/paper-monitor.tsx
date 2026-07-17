@@ -35,13 +35,15 @@ const difficultyOptions: Array<{ value: DifficultyFilter; label: string }> = [
 ];
 
 export default function PaperMonitor({
+  initialStatus = "",
   initialCategorySlug = "",
   initialDifficulty = "",
 }: {
+  initialStatus?: PaperStatusFilter;
   initialCategorySlug?: string;
   initialDifficulty?: DifficultyFilter;
 }) {
-  const [status, setStatus] = useState<PaperStatusFilter>("");
+  const [status, setStatus] = useState<PaperStatusFilter>(initialStatus);
   const [categorySlug, setCategorySlug] = useState(initialCategorySlug);
   const [difficulty, setDifficulty] = useState<DifficultyFilter>(initialDifficulty);
   const [page, setPage] = useState(1);

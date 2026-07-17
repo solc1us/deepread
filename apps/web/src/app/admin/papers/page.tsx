@@ -1,6 +1,7 @@
 import PaperMonitor from "../_components/paper-monitor";
 
 type DifficultyFilter = "" | "beginner_friendly" | "moderate" | "difficult" | "expert";
+type PaperStatusFilter = "" | "pending" | "needs_review" | "published" | "rejected" | "inactive";
 
 const difficultyFilters = new Set<DifficultyFilter>([
   "",
@@ -8,6 +9,14 @@ const difficultyFilters = new Set<DifficultyFilter>([
   "moderate",
   "difficult",
   "expert",
+]);
+const paperStatusFilters = new Set<PaperStatusFilter>([
+  "",
+  "pending",
+  "needs_review",
+  "published",
+  "rejected",
+  "inactive",
 ]);
 
 function firstSearchParam(value: string | string[] | undefined) {
@@ -21,10 +30,14 @@ export default async function AdminPapersPage({
 }) {
   const resolvedSearchParams = await searchParams;
   const categorySlug = firstSearchParam(resolvedSearchParams.category)?.trim() ?? "";
+  const requestedStatus = firstSearchParam(resolvedSearchParams.status) ?? "";
+  const status = paperStatusFilters.has(requestedStatus as PaperStatusFilter)
+    ? (requestedStatus as PaperStatusFilter)
+    : "";
   const requestedDifficulty = firstSearchParam(resolvedSearchParams.difficulty) ?? "";
   const difficulty = difficultyFilters.has(requestedDifficulty as DifficultyFilter)
     ? (requestedDifficulty as DifficultyFilter)
     : "";
 
-  return <PaperMonitor initialCategorySlug={categorySlug} initialDifficulty={difficulty} />;
+  return <PaperMonitor initialCategorySlug={categorySlug} initialDifficulty={difficulty} initialStatus={status} />;
 }
