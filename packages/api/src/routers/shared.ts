@@ -173,8 +173,8 @@ export function mapBookmark(bookmark: {
     };
     classification: {
       difficultyLevel: "beginner_friendly" | "moderate" | "difficult" | "expert";
-      beginnerScore: number;
-      estimatedReadingTime: number;
+      beginnerScore: number | null;
+      estimatedReadingTime: number | null;
     } | null;
   };
 }) {

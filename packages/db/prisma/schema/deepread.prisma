@@ -91,18 +91,18 @@ model PaperClassification {
   id                         String          @id @default(uuid()) @db.Uuid
   paperId                    String          @unique @map("paper_id") @db.Uuid
   difficultyLevel            DifficultyLevel @map("difficulty_level")
-  beginnerScore              Int             @map("beginner_score")
-  estimatedReadingTime       Int             @map("estimated_reading_time")
-  abstractLengthScore        Int             @map("abstract_length_score")
-  sentenceComplexityScore    Int             @map("sentence_complexity_score")
-  jargonDensityScore         Int             @map("jargon_density_score")
-  methodologyComplexityScore Int             @map("methodology_complexity_score")
-  statisticalComplexityScore Int             @map("statistical_complexity_score")
-  prerequisiteScore          Int             @map("prerequisite_score")
-  clarityScore               Int             @map("clarity_score")
+  beginnerScore              Int?            @map("beginner_score")
+  estimatedReadingTime       Int?            @map("estimated_reading_time")
+  abstractLengthScore        Int?            @map("abstract_length_score")
+  sentenceComplexityScore    Int?            @map("sentence_complexity_score")
+  jargonDensityScore         Int?            @map("jargon_density_score")
+  methodologyComplexityScore Int?            @map("methodology_complexity_score")
+  statisticalComplexityScore Int?            @map("statistical_complexity_score")
+  prerequisiteScore          Int?            @map("prerequisite_score")
+  clarityScore               Int?            @map("clarity_score")
   classificationReason       String          @map("classification_reason") @db.Text
-  readingWarning             String          @map("reading_warning") @db.Text
-  recommendedReader          String          @map("recommended_reader") @db.Text
+  readingWarning             String?         @map("reading_warning") @db.Text
+  recommendedReader          String?         @map("recommended_reader") @db.Text
   classificationVersion      String          @map("classification_version")
   paper                      Paper           @relation(fields: [paperId], references: [id], onDelete: Cascade)
   createdAt                  DateTime        @default(now()) @map("created_at")
@@ -111,6 +111,22 @@ model PaperClassification {
   @@index([difficultyLevel])
   @@index([beginnerScore])
   @@map("paper_classifications")
+}
+
+model AdminPaperAuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  adminUserId    String   @map("admin_user_id")
+  action         String
+  paperId        String   @map("paper_id") @db.Uuid
+  previousValues Json?    @map("previous_values")
+  newValues      Json?    @map("new_values")
+  reason         String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([adminUserId])
+  @@index([paperId])
+  @@index([createdAt])
+  @@map("admin_paper_audit_logs")
 }
 
 model ReadingProgress {

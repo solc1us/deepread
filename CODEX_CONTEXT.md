@@ -22,7 +22,8 @@ Core MVP:
 - notes
 - profile
 - reading statistics
-- admin monitoring dashboard
+- admin monitoring and pipeline controls
+- admin data-quality audit and remediation
 
 ---
 
@@ -50,24 +51,27 @@ Important:
 
 ## Completed Phases
 
+## Completed Phases
+
 Completed:
 
-- Phase 1: setup, DB, auth, user/admin role
-- Phase 2: paper schema, library, search/filter/sort, detail
-- Phase 3: OpenAlex ingestion, normalization, dedupe, logs
-- Phase 3.5: admin auth, admin guard, removed `x-admin-secret`
-- Phase 4: rule-based classifier, classification service, admin classification tools
-- Phase 5: reading mode, progress, bookmarks, notes, grouped notes, profile, role-aware sidebar/navbar, UI polish
-- Phase 6: application-layer access control audit
-- Phase 6.5: tRPC routers split by feature
-- Phase 7: user reading statistics dashboard
-- Phase 8: admin monitoring dashboard, admin sidebar, pipeline controls, logs table, papers monitor, DB health status
-- Phase 9: classifier evaluation/calibration
+- Phase 1: project setup, database, Better Auth, user/admin roles
+- Phase 2: paper schema, public library, search/filter/sort, paper detail
+- Phase 3: OpenAlex ingestion, normalization, deduplication, ingestion logs, admin authorization guard, removal of `x-admin-secret`
+- Phase 4: metadata-only rule-based classifier, classification service, admin classification tools
+- Phase 5: reading mode, progress, bookmarks, notes, profile, role-aware navigation, UI polish
+- Phase 6: application-layer access-control audit and tRPC router split by feature
+- Phase 7: user reading-statistics dashboard
+- Phase 8: admin monitoring dashboard, pipeline controls, logs, paper monitor, and database-health status
+- Phase 9: classifier evaluation and calibration, production classifier v2.1.4, paper-status workflow, legacy reclassification, backend profiling, and bounded-concurrency optimization
+
+In progress:
+
+- Phase 10: data-quality audit, issue drill-down, admin remediation, metadata cleanup, duplicate review, manual relevance spot-check, and dataset freeze
 
 Planned:
 
-- Phase 10: data expansion and cleanup
-- Phase 11: final testing, hardening, deployment, docs update
+- Phase 11: final testing, hardening, deployment, and documentation update
 
 Deferred:
 
@@ -119,12 +123,12 @@ Admin:
 - `admin.dashboard.getOverview`
 - `admin.ingestion.runOpenAlex`
 - `admin.ingestion.logs`
-- `admin.ingestion.getQueryPresets`
 - `admin.logs.list`
 - `admin.papers.list`
 - `admin.classification.runForPaper`
 - `admin.classification.runBatch`
-- `admin.classification.preview` if implemented
+- `admin.dataQuality.getOverview`
+- `admin.dataQuality.getDetails`
 
 User:
 
@@ -172,19 +176,34 @@ Rules:
 
 ## MVP Technical Decisions
 
-- Ingestion is manually admin-triggered for now.
-- OpenAlex is the only active ingestion source for now.
-- Admin ingestion query input uses curated presets.
+- Ingestion is manually triggered by admins.
+- OpenAlex is the only active ingestion source.
+- Admin ingestion accepts a free-text OpenAlex search query and category selection.
+- Application ingestion limit is 1–500 papers.
+- OpenAlex requests fetch at most 100 works per request and paginate internally.
+- OpenAlex database writes use bounded concurrency of 8.
+- Batch classification uses bounded concurrency of 8.
+- Production classifier version is `rule-based-v2.1.4`.
 - Difficulty classification is metadata-only.
-- Do not parse/store PDFs.
+- Papers failing the classifier quality gate use `needs_review`.
+- Public paper queries expose only `published` papers.
+- Paper statuses are:
+  - `pending`
+  - `needs_review`
+  - `published`
+  - `rejected`
+  - `inactive`
+- Existing published paper IDs and user relations must be preserved during cleanup.
+- Do not delete and re-ingest papers to reclassify them.
+- Do not parse or store PDFs.
 - Users read through external source/PDF links.
 - Reading progress is manual.
-- Pause/save keeps status `reading`, saves progress, updates `last_read_at`.
-- Completed means status `completed`, progress `100`, set `completed_at`.
+- Pause/save keeps status `reading`, saves progress, and updates `last_read_at`.
+- Completed means status `completed`, progress `100`, and sets `completed_at`.
 - Statistics reading time is estimated, not real tracked duration.
-- Admin dashboard is monitoring/control UI only, not a worker/scheduler system.
-- No external AI/LLM APIs for classifier.
-- No new infrastructure unless requested.
+- Admin tools include monitoring, pipeline control, data-quality auditing, and controlled remediation.
+- No external AI/LLM APIs are used by the classifier.
+- No workers, scheduler, or additional infrastructure unless explicitly requested.
 
 ---
 
@@ -206,7 +225,7 @@ Navigation:
 
 - Guest: public navbar with Home, Papers, Login/Register if route exists
 - User: sidebar with Papers, Profile, Notes, Statistics, Logout
-- Admin: sidebar with Overview, Pipeline, Logs, Classification, Papers Monitor, optional User App group, Logout
+- Admin: sidebar with Overview, Pipeline, Logs, Classification, Papers Monitor, Data Quality, optional User App group, and Logout
 - Never show broken/no-access links.
 - Never show admin links to normal users.
 - Authenticated users should not lose sidebar when navigating to public-capable pages.
@@ -215,16 +234,24 @@ Navigation:
 
 ## Performance Rules
 
-Recent mitigation:
+Current mitigations:
 
 - use `next dev --webpack --port 3001`
+- root development uses streamed Turbo output
 - bounded React Query cache
 - disabled focus refetch
 - reduced retries
 - removed always-mounted React Query Devtools
+- OpenAlex ingestion database writes use bounded concurrency of 8
+- batch classification uses bounded concurrency of 8
+- optional backend profiling is disabled by default:
+  - `CLASSIFICATION_PROFILING=false`
+  - `OPENALEX_INGESTION_PROFILING=false`
 
 Avoid:
 
+- worker threads for the current metadata-only classifier
+- unbounded `Promise.all` over large paper batches
 - `refetchInterval`
 - mutation/refetch loops
 - repeated session subscriptions
@@ -246,3 +273,18 @@ Rule:
 - Do not add large feature blocks back into `routers/index.ts`.
 - Preserve existing tRPC paths.
 - Avoid circular imports.
+
+## Current Phase 10 Rules
+
+- Dataset currently contains approximately 1,500 published papers.
+- Every published paper should have a complete classification.
+- Current production classification version is `rule-based-v2.1.4`.
+- Data Quality overview and drill-down pages are permanent admin features.
+- Data-quality remediation must preserve paper IDs and user relations.
+- Missing metadata may be edited by admins with field-specific validation.
+- `needs_review` papers may only become published after:
+  - successful rule-based reclassification; or
+  - explicit manual admin classification.
+- Probable duplicate-title matches are review candidates, not automatically confirmed duplicates.
+- Do not hard-delete duplicate papers before relations and sources are handled safely.
+- Targeted ingestion should only be performed when the audit identifies a real dataset gap.

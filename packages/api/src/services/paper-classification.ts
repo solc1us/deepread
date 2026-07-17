@@ -16,9 +16,19 @@ import { BackendProfiler, formatProfileSummary } from "./backend-profiler";
 const CLASSIFICATION_BATCH_CONCURRENCY = 8;
 export const CLASSIFICATION_VERSION = "rule-based-v2.1.4";
 
+type ClassifiablePaperStatus = "pending" | "needs_review" | "published";
+
+export interface ClassifyPaperByIdOptions {
+  allowedStatuses?: ClassifiablePaperStatus[];
+  audit?: {
+    adminUserId: string;
+    action: "paper_reclassified";
+  };
+}
+
 export class PaperClassificationServiceError extends Error {
   constructor(
-    public readonly code: "PAPER_NOT_FOUND" | "PAPER_INACTIVE",
+    public readonly code: "PAPER_NOT_FOUND" | "PAPER_INACTIVE" | "PAPER_STATUS_NOT_ALLOWED",
     message: string,
   ) {
     super(message);
@@ -124,26 +134,6 @@ function buildClassificationData(
   };
 }
 
-function getValidationError(paper: {
-  title: string | null;
-  abstract: string | null;
-  category: { id: string; name: string } | null;
-}) {
-  if (!paper.title?.trim()) {
-    return "Missing title";
-  }
-
-  if (!paper.abstract?.trim()) {
-    return "Missing abstract";
-  }
-
-  if (!paper.category) {
-    return "Missing category";
-  }
-
-  return null;
-}
-
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -167,6 +157,7 @@ function runProfiled<TResult>(
 async function classifyPaperByIdWithProfiler(
   paperId: string,
   profiler?: BackendProfiler,
+  options: ClassifyPaperByIdOptions = {},
 ): Promise<ClassifyPaperByIdResult> {
   const paper = await prisma.paper.findUnique({
     where: {
@@ -179,6 +170,12 @@ async function classifyPaperByIdWithProfiler(
       keywords: true,
       publicationYear: true,
       status: true,
+      classification: {
+        select: {
+          difficultyLevel: true,
+          classificationVersion: true,
+        },
+      },
       category: {
         select: {
           id: true,
@@ -196,28 +193,11 @@ async function classifyPaperByIdWithProfiler(
     throw new PaperClassificationServiceError("PAPER_INACTIVE", "Inactive papers cannot be classified");
   }
 
-  const validationError = getValidationError(paper);
-
-  if (validationError) {
-    await runProfiled(profiler, "database_write_per_paper", () =>
-      prisma.paper.update({
-        where: {
-          id: paper.id,
-          status: {
-            not: "inactive",
-          },
-        },
-        data: {
-          status: "rejected",
-        },
-      }),
+  if (options.allowedStatuses && !options.allowedStatuses.includes(paper.status as ClassifiablePaperStatus)) {
+    throw new PaperClassificationServiceError(
+      "PAPER_STATUS_NOT_ALLOWED",
+      "Only pending, needs-review, or published papers can be reclassified",
     );
-
-    return {
-      paperId: paper.id,
-      status: "rejected",
-      rejectionReason: validationError,
-    };
   }
 
   let classifierResult: ReturnType<typeof classifyPaperDifficultyV2>;
@@ -236,16 +216,37 @@ async function classifyPaperByIdWithProfiler(
     const rejectionReason = `Classification could not be performed: ${getErrorMessage(error)}`;
 
     await runProfiled(profiler, "database_write_per_paper", () =>
-      prisma.paper.update({
-        where: {
-          id: paper.id,
-          status: {
-            not: "inactive",
+      prisma.$transaction(async (transaction) => {
+        await transaction.paper.update({
+          where: {
+            id: paper.id,
+            status: paper.status,
           },
-        },
-        data: {
-          status: "rejected",
-        },
+          data: {
+            status: "rejected",
+          },
+        });
+
+        if (options.audit) {
+          await transaction.adminPaperAuditLog.create({
+            data: {
+              adminUserId: options.audit.adminUserId,
+              action: options.audit.action,
+              paperId: paper.id,
+              previousValues: {
+                status: paper.status,
+                classificationVersion: paper.classification?.classificationVersion ?? null,
+                difficulty: paper.classification?.difficultyLevel ?? null,
+              },
+              newValues: {
+                status: "rejected",
+                classificationVersion: paper.classification?.classificationVersion ?? null,
+                difficulty: paper.classification?.difficultyLevel ?? null,
+              },
+              reason: "Classification could not be completed",
+            },
+          });
+        }
       }),
     );
 
@@ -258,16 +259,37 @@ async function classifyPaperByIdWithProfiler(
 
   if (classifierResult.outcome === "needs_review") {
     await runProfiled(profiler, "database_write_per_paper", () =>
-      prisma.paper.update({
-        where: {
-          id: paper.id,
-          status: {
-            not: "inactive",
+      prisma.$transaction(async (transaction) => {
+        await transaction.paper.update({
+          where: {
+            id: paper.id,
+            status: paper.status,
           },
-        },
-        data: {
-          status: "needs_review",
-        },
+          data: {
+            status: "needs_review",
+          },
+        });
+
+        if (options.audit) {
+          await transaction.adminPaperAuditLog.create({
+            data: {
+              adminUserId: options.audit.adminUserId,
+              action: options.audit.action,
+              paperId: paper.id,
+              previousValues: {
+                status: paper.status,
+                classificationVersion: paper.classification?.classificationVersion ?? null,
+                difficulty: paper.classification?.difficultyLevel ?? null,
+              },
+              newValues: {
+                status: "needs_review",
+                classificationVersion: paper.classification?.classificationVersion ?? null,
+                difficulty: paper.classification?.difficultyLevel ?? null,
+              },
+              reason: classifierResult.reviewReasons.join("; "),
+            },
+          });
+        }
       }),
     );
 
@@ -285,8 +307,8 @@ async function classifyPaperByIdWithProfiler(
   );
 
   await runProfiled(profiler, "database_write_per_paper", () =>
-    prisma.$transaction([
-      prisma.paperClassification.upsert({
+    prisma.$transaction(async (transaction) => {
+      await transaction.paperClassification.upsert({
         where: {
           paperId: paper.id,
         },
@@ -295,19 +317,37 @@ async function classifyPaperByIdWithProfiler(
           paperId: paper.id,
           ...classificationData,
         },
-      }),
-      prisma.paper.update({
+      });
+      await transaction.paper.update({
         where: {
           id: paper.id,
-          status: {
-            not: "inactive",
-          },
+          status: paper.status,
         },
         data: {
           status: "published",
         },
-      }),
-    ]),
+      });
+
+      if (options.audit) {
+        await transaction.adminPaperAuditLog.create({
+          data: {
+            adminUserId: options.audit.adminUserId,
+            action: options.audit.action,
+            paperId: paper.id,
+            previousValues: {
+              status: paper.status,
+              classificationVersion: paper.classification?.classificationVersion ?? null,
+              difficulty: paper.classification?.difficultyLevel ?? null,
+            },
+            newValues: {
+              status: "published",
+              classificationVersion: classifierResult.classificationVersion,
+              difficulty: classifierResult.classification.difficultyLevel,
+            },
+          },
+        });
+      }
+    }),
   );
 
   return {
@@ -318,8 +358,11 @@ async function classifyPaperByIdWithProfiler(
   };
 }
 
-export async function classifyPaperById(paperId: string): Promise<ClassifyPaperByIdResult> {
-  return await classifyPaperByIdWithProfiler(paperId);
+export async function classifyPaperById(
+  paperId: string,
+  options: ClassifyPaperByIdOptions = {},
+): Promise<ClassifyPaperByIdResult> {
+  return await classifyPaperByIdWithProfiler(paperId, undefined, options);
 }
 
 export async function classifyPendingPapers(input: ClassifyPendingPapersInput = {}): Promise<ClassifyPendingPapersResult> {
