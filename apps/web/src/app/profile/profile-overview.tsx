@@ -20,8 +20,8 @@ type PaperSummary = {
   };
   classification: {
     difficultyLevel: "beginner_friendly" | "moderate" | "difficult" | "expert";
-    beginnerScore: number;
-    estimatedReadingTime: number;
+    beginnerScore: number | null;
+    estimatedReadingTime: number | null;
   } | null;
 };
 
@@ -94,11 +94,15 @@ function ProfilePaperCard({
       <CardContent className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
         {paper.classification ? (
           <>
-            <span>Beginner score {paper.classification.beginnerScore}/100</span>
-            <span className="flex items-center gap-1">
-              <Clock />
-              {paper.classification.estimatedReadingTime} min read
-            </span>
+            {paper.classification.beginnerScore !== null ? (
+              <span>Beginner score {paper.classification.beginnerScore}/100</span>
+            ) : null}
+            {paper.classification.estimatedReadingTime !== null ? (
+              <span className="flex items-center gap-1">
+                <Clock />
+                {paper.classification.estimatedReadingTime} min read
+              </span>
+            ) : null}
           </>
         ) : null}
         {detail ? <span>{detail}</span> : null}

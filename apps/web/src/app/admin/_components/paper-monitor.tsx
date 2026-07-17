@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@deepread/ui/component
 import { Skeleton } from "@deepread/ui/components/skeleton";
 import { cn } from "@deepread/ui/lib/utils";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertCircle, ArchiveRestore, ChevronLeft, ChevronRight, CircleOff, FileText, Send } from "lucide-react";
+import { AlertCircle, ArchiveRestore, ChevronLeft, ChevronRight, CircleOff, FileText } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +23,9 @@ import {
   formatAdminDifficulty,
   getAdminDifficultyClass,
 } from "./admin-ui";
+import { invalidateAdminRemediationQueries } from "./admin-remediation-cache";
+import { PaperMetadataEditor } from "./paper-metadata-editor";
+import { PaperRemediationActions } from "./paper-remediation-actions";
 
 type PaperStatusFilter = "" | "pending" | "needs_review" | "published" | "rejected" | "inactive";
 type DifficultyFilter = "" | "beginner_friendly" | "moderate" | "difficult" | "expert";
@@ -38,15 +42,17 @@ export default function PaperMonitor({
   initialStatus = "",
   initialCategorySlug = "",
   initialDifficulty = "",
+  initialPage = 1,
 }: {
   initialStatus?: PaperStatusFilter;
   initialCategorySlug?: string;
   initialDifficulty?: DifficultyFilter;
+  initialPage?: number;
 }) {
   const [status, setStatus] = useState<PaperStatusFilter>(initialStatus);
   const [categorySlug, setCategorySlug] = useState(initialCategorySlug);
   const [difficulty, setDifficulty] = useState<DifficultyFilter>(initialDifficulty);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
   const categories = useQuery(trpc.categories.list.queryOptions());
   const categoryId = categories.data?.find((category) => toCategorySlug(category.name) === categorySlug)?.id;
   const categoryFilterReady = !categorySlug || categories.isSuccess;
@@ -63,11 +69,8 @@ export default function PaperMonitor({
 
   const invalidatePaperStatusData = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: trpc.admin.papers.list.queryKey() }),
-      queryClient.invalidateQueries({ queryKey: trpc.admin.dashboard.getOverview.queryKey(), refetchType: "none" }),
+      invalidateAdminRemediationQueries(),
       queryClient.invalidateQueries({ queryKey: trpc.categories.list.queryKey(), refetchType: "none" }),
-      queryClient.invalidateQueries({ queryKey: trpc.papers.list.queryKey(), refetchType: "none" }),
-      queryClient.invalidateQueries({ queryKey: trpc.papers.detail.queryKey(), refetchType: "none" }),
       queryClient.invalidateQueries({ queryKey: trpc.bookmark.list.queryKey(), refetchType: "none" }),
       queryClient.invalidateQueries({ queryKey: trpc.notes.listMineGroupedByPaper.queryKey(), refetchType: "none" }),
       queryClient.invalidateQueries({ queryKey: trpc.profile.getOverview.queryKey(), refetchType: "none" }),
@@ -92,16 +95,7 @@ export default function PaperMonitor({
       onError: (error) => toast.error(error.message),
     }),
   );
-  const publishPaper = useMutation(
-    trpc.admin.papers.publish.mutationOptions({
-      onSuccess: async () => {
-        toast.success("Paper published");
-        await invalidatePaperStatusData();
-      },
-      onError: (error) => toast.error(error.message),
-    }),
-  );
-  const statusMutationPending = deactivatePaper.isPending || reactivatePaper.isPending || publishPaper.isPending;
+  const statusMutationPending = deactivatePaper.isPending || reactivatePaper.isPending;
 
   const confirmDeactivate = (paperId: string) => {
     if (window.confirm("Deactivate this paper? It will no longer be visible in the public library.")) {
@@ -112,12 +106,6 @@ export default function PaperMonitor({
   const confirmReactivate = (paperId: string) => {
     if (window.confirm("Reactivate this paper? Classified papers will be published; otherwise they will need review.")) {
       reactivatePaper.mutate({ paperId });
-    }
-  };
-
-  const confirmPublish = (paperId: string) => {
-    if (window.confirm("Publish this paper to the public library?")) {
-      publishPaper.mutate({ paperId });
     }
   };
 
@@ -133,6 +121,12 @@ export default function PaperMonitor({
     setDifficulty(value);
     setPage(1);
   };
+  const returnParameters = new URLSearchParams();
+  if (status) returnParameters.set("status", status);
+  if (categorySlug) returnParameters.set("category", categorySlug);
+  if (difficulty) returnParameters.set("difficulty", difficulty);
+  if (page > 1) returnParameters.set("page", String(page));
+  const returnTo = `/admin/papers${returnParameters.size > 0 ? `?${returnParameters.toString()}` : ""}`;
 
   return (
     <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 md:py-10">
@@ -164,30 +158,30 @@ export default function PaperMonitor({
                     <span className={cn("rounded-md px-2.5 py-1 capitalize", getAdminDifficultyClass(paper.difficultyLevel))}>{formatAdminDifficulty(paper.difficultyLevel)}</span>
                     {paper.beginnerScore !== null ? <span className="rounded-md border bg-background px-2.5 py-1">Score {paper.beginnerScore}/100</span> : null}
                   </div>
-                  {paper.status === "published" ? <Link className="text-sm font-medium leading-6 hover:text-primary" href={`/papers/${paper.id}`}>{paper.title}</Link> : <span className="text-sm font-medium leading-6">{paper.title}</span>}
+                  <Link
+                    className="text-sm font-medium leading-6 underline-offset-4 hover:text-primary hover:underline"
+                    href={`/admin/papers/${paper.id}?returnTo=${encodeURIComponent(returnTo)}` as Route}
+                  >
+                    {paper.title}
+                  </Link>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>Created {formatAdminDate(paper.createdAt)}</span>
                     <span>Updated {formatAdminDate(paper.updatedAt)}</span>
                   </div>
-                  {paper.status === "published" || paper.status === "needs_review" || paper.status === "inactive" ? (
-                    <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                  <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                    {paper.status !== "needs_review" ? (
+                      <PaperMetadataEditor disabled={statusMutationPending} paperId={paper.id} paperTitle={paper.title} />
+                    ) : null}
                       {paper.status === "published" ? (
                         <Button disabled={statusMutationPending} onClick={() => confirmDeactivate(paper.id)} size="sm" variant="outline"><CircleOff />Deactivate</Button>
                       ) : null}
-                      {paper.status === "needs_review" && paper.hasValidClassification ? (
-                        <Button disabled={statusMutationPending} onClick={() => confirmPublish(paper.id)} size="sm"><Send />Publish</Button>
-                      ) : null}
                       {paper.status === "needs_review" ? (
-                        <Button disabled={statusMutationPending} onClick={() => confirmDeactivate(paper.id)} size="sm" variant="outline"><CircleOff />Deactivate</Button>
+                        <PaperRemediationActions paperId={paper.id} paperTitle={paper.title} />
                       ) : null}
                       {paper.status === "inactive" ? (
                         <Button disabled={statusMutationPending} onClick={() => confirmReactivate(paper.id)} size="sm" variant="outline"><ArchiveRestore />Reactivate</Button>
                       ) : null}
-                      {paper.status === "needs_review" && !paper.hasValidClassification ? (
-                        <span className="text-xs text-muted-foreground">A valid classification is required before publication.</span>
-                      ) : null}
-                    </div>
-                  ) : null}
+                  </div>
                 </article>
               ))}
             </div>

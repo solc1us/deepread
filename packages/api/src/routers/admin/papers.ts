@@ -8,6 +8,7 @@ import {
   classifyPaperById,
   PaperClassificationServiceError,
 } from "../../services/paper-classification";
+import { classifyPaperDifficultyV2 } from "../../services/paper-difficulty-classifier";
 import { difficultyLevelSchema } from "../shared";
 
 const MANUAL_CLASSIFICATION_VERSION = "manual-admin-v1";
@@ -137,6 +138,14 @@ function normalizeAuthors(authors: unknown) {
   }
 
   return normalized;
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
 function requireUsableAuthors(authors: unknown) {
@@ -325,6 +334,105 @@ export const adminPapersRouter = router({
         total,
         totalPages: Math.ceil(total / input.limit),
       },
+    };
+  }),
+  detail: adminProcedure.input(paperIdInputSchema).query(async ({ input }) => {
+    const paper = await prisma.paper.findUnique({
+      where: { id: input.paperId },
+      select: {
+        id: true,
+        title: true,
+        abstract: true,
+        authors: true,
+        publicationYear: true,
+        doi: true,
+        sourceName: true,
+        sourceUrl: true,
+        pdfUrl: true,
+        keywords: true,
+        language: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        sources: {
+          orderBy: {
+            createdAt: "asc",
+          },
+          take: 1,
+          select: {
+            provider: true,
+            externalId: true,
+          },
+        },
+        classification: {
+          select: {
+            difficultyLevel: true,
+            beginnerScore: true,
+            estimatedReadingTime: true,
+            classificationReason: true,
+            readingWarning: true,
+            recommendedReader: true,
+            classificationVersion: true,
+          },
+        },
+      },
+    });
+
+    if (!paper) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Paper not found",
+      });
+    }
+
+    let reviewReasons: string[] = [];
+    let reviewClassificationVersion: string | null = null;
+
+    if (paper.status === "needs_review") {
+      try {
+        const reviewResult = classifyPaperDifficultyV2({
+          title: paper.title,
+          abstract: paper.abstract,
+          keywords: normalizeStringArray(paper.keywords),
+          categoryName: paper.category.name,
+          publicationYear: paper.publicationYear,
+        });
+
+        reviewClassificationVersion = reviewResult.classificationVersion;
+        reviewReasons = reviewResult.outcome === "needs_review"
+          ? reviewResult.reviewReasons
+          : ["Current metadata passes review. Re-run the classifier to publish this paper."];
+      } catch {
+        reviewReasons = ["Current metadata could not be evaluated for review."];
+      }
+    }
+
+    return {
+      paperId: paper.id,
+      title: paper.title,
+      abstract: paper.abstract,
+      authors: normalizeAuthors(paper.authors),
+      publicationYear: paper.publicationYear,
+      category: paper.category,
+      status: paper.status,
+      sourceName: paper.sourceName,
+      sourceUrl: paper.sourceUrl,
+      pdfUrl: paper.pdfUrl,
+      doi: paper.doi,
+      provider: paper.sources[0]?.provider ?? null,
+      externalId: paper.sources[0]?.externalId ?? null,
+      language: paper.language,
+      createdAt: paper.createdAt.toISOString(),
+      updatedAt: paper.updatedAt.toISOString(),
+      classification: paper.classification,
+      reviewReasons,
+      reviewClassificationVersion,
     };
   }),
   updateMetadata: adminProcedure.input(updateMetadataInputSchema).mutation(async ({ ctx, input }) => {

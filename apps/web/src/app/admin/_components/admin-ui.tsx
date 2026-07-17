@@ -27,6 +27,12 @@ export function formatAdminDifficulty(value: string | null | undefined) {
   return value?.replace("_", " ") ?? "Unclassified";
 }
 
+export function formatAdminClassificationProvenance(value: string | null | undefined) {
+  if (value === "rule-based-v2.1.4") return "Rule-based classification";
+  if (value === "manual-admin-v1") return "Manual admin classification";
+  return value?.trim() || "No classification version";
+}
+
 export function getAdminStatusClass(value: string | null | undefined) {
   switch (value) {
     case "published":

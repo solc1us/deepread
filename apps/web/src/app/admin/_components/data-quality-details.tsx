@@ -14,6 +14,7 @@ import Link from "next/link";
 import { trpc } from "@/utils/trpc";
 
 import { AdminPageHeader, AdminStatusBadge } from "./admin-ui";
+import { PaperMetadataEditor } from "./paper-metadata-editor";
 
 export type DataQualityDetailIssue =
   | "missing-authors"
@@ -208,6 +209,7 @@ function MissingAuthorsTable({
               <th className="px-3 py-3 font-medium" scope="col">Provider ID</th>
               <th className="px-3 py-3 font-medium" scope="col">Source</th>
               <th className="px-3 py-3 font-medium" scope="col">Status</th>
+              <th className="px-4 py-3 text-right font-medium" scope="col">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/70">
@@ -230,6 +232,17 @@ function MissingAuthorsTable({
                     {paper.sourceUrl ? <a className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline" href={paper.sourceUrl} rel="noreferrer" target="_blank">Open source<ArrowUpRight aria-hidden="true" className="size-3.5" /></a> : "Not available"}
                   </td>
                   <td className="px-3 py-3"><AdminStatusBadge value={paper.status} /></td>
+                  <td className="px-4 py-3 text-right">
+                    <PaperMetadataEditor
+                      initialValues={{
+                        authors: paper.currentAuthors,
+                        publicationYear: paper.publicationYear,
+                        sourceUrl: paper.sourceUrl,
+                      }}
+                      paperId={paper.paperId}
+                      paperTitle={paper.title}
+                    />
+                  </td>
                 </tr>
               );
             })}
