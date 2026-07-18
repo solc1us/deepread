@@ -1,19 +1,20 @@
 model User {
-  id              String            @id
-  name            String
-  email           String
-  emailVerified   Boolean           @default(false)
-  image           String?
-  educationLevel  String?           @map("education_level")
-  interests       Json?
-  role            UserRole          @default(user)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  sessions        Session[]
-  accounts        Account[]
-  readingProgress ReadingProgress[]
-  bookmarks       Bookmark[]
-  readingNotes    ReadingNote[]
+  id                        String                     @id
+  name                      String
+  email                     String
+  emailVerified             Boolean                    @default(false)
+  image                     String?
+  educationLevel            String?                    @map("education_level")
+  interests                 Json?
+  role                      UserRole                   @default(user)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  sessions                  Session[]
+  accounts                  Account[]
+  readingProgress           ReadingProgress[]
+  bookmarks                 Bookmark[]
+  readingNotes              ReadingNote[]
+  duplicateGroupResolutions DuplicateGroupResolution[]
 
   @@unique([email])
   @@map("user")

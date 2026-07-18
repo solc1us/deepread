@@ -9,9 +9,12 @@ import {
   PaperClassificationServiceError,
 } from "../../services/paper-classification";
 import { classifyPaperDifficultyV2 } from "../../services/paper-difficulty-classifier";
+import {
+  hasValidClassification,
+  MANUAL_CLASSIFICATION_VERSION,
+} from "../../services/paper-classification-validity";
 import { difficultyLevelSchema } from "../shared";
 
-const MANUAL_CLASSIFICATION_VERSION = "manual-admin-v1";
 const MIN_MANUAL_REASON_LENGTH = 20;
 const MIN_PUBLICATION_YEAR = 1900;
 const MAX_PUBLICATION_YEAR = 2100;
@@ -87,31 +90,6 @@ const statusChangePaperSelect = {
     },
   },
 } as const;
-
-function hasValidClassification(
-  classification: {
-    difficultyLevel: string;
-    beginnerScore: number | null;
-    classificationVersion: string;
-    classificationReason: string;
-  } | null,
-) {
-  if (classification?.classificationVersion === MANUAL_CLASSIFICATION_VERSION) {
-    return Boolean(classification.difficultyLevel && classification.classificationReason.trim());
-  }
-
-  const beginnerScore = classification?.beginnerScore;
-
-  return Boolean(
-    classification &&
-      classification.difficultyLevel &&
-      typeof beginnerScore === "number" &&
-      Number.isInteger(beginnerScore) &&
-      beginnerScore >= 0 &&
-      beginnerScore <= 100 &&
-      classification.classificationVersion.trim(),
-  );
-}
 
 function normalizeAuthors(authors: unknown) {
   if (!Array.isArray(authors)) {

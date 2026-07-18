@@ -30,6 +30,11 @@ enum IngestionStatus {
   partial
 }
 
+enum DuplicateGroupResolutionType {
+  keep_both
+  merge
+}
+
 model Category {
   id          String   @id @default(uuid()) @db.Uuid
   name        String   @unique
@@ -127,6 +132,27 @@ model AdminPaperAuditLog {
   @@index([paperId])
   @@index([createdAt])
   @@map("admin_paper_audit_logs")
+}
+
+model DuplicateGroupResolution {
+  id                String                       @id @default(uuid()) @db.Uuid
+  groupKey          String                       @map("group_key") @db.Text
+  groupFingerprint  String                       @unique @map("group_fingerprint")
+  resolution        DuplicateGroupResolutionType
+  canonicalPaperId  String?                      @map("canonical_paper_id") @db.Uuid
+  paperIds          Json                         @map("paper_ids")
+  duplicatePaperIds Json                         @map("duplicate_paper_ids")
+  reason            String                       @db.Text
+  resolvedById      String                       @map("resolved_by_id")
+  resolvedBy        User                         @relation(fields: [resolvedById], references: [id], onDelete: Restrict)
+  resolvedAt        DateTime                     @default(now()) @map("resolved_at")
+
+  @@index([groupKey])
+  @@index([resolution])
+  @@index([canonicalPaperId])
+  @@index([resolvedById])
+  @@index([resolvedAt])
+  @@map("duplicate_group_resolutions")
 }
 
 model ReadingProgress {

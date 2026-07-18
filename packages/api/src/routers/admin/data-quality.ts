@@ -4,6 +4,11 @@ import { z } from "zod";
 import { adminProcedure, router } from "../../index";
 import { QUALITY_GATE_MIN_ABSTRACT_WORDS } from "../../services/difficulty-classifier/quality-gate";
 import { tokenizeWords } from "../../services/difficulty-classifier/text-utils";
+import {
+  buildDuplicateTitleGroups,
+  excludeResolvedDuplicateGroups,
+} from "../../services/duplicate-title-groups";
+import { resolveDuplicateGroup } from "../../services/duplicate-paper-resolution";
 import { normalizeDoi, normalizeOpenAlexId, OPENALEX_PROVIDER } from "../../services/openalex-identifiers";
 import { CLASSIFICATION_VERSION } from "../../services/paper-classification";
 
@@ -34,6 +39,41 @@ const dataQualityIssueSchema = z.enum([
   "duplicate-title",
   "unpublished-user-relations",
 ]);
+const duplicateResolutionReasonSchema = z
+  .string()
+  .trim()
+  .min(20, "Reason must be at least 20 characters")
+  .max(2000);
+const resolveDuplicateGroupInputSchema = z
+  .discriminatedUnion("resolution", [
+    z.object({
+      resolution: z.literal("keep_both"),
+      groupKey: z.string().trim().min(1),
+      paperIds: z.array(z.string().uuid()).min(2).max(100),
+      reason: duplicateResolutionReasonSchema,
+    }),
+    z.object({
+      resolution: z.literal("merge"),
+      groupKey: z.string().trim().min(1),
+      canonicalPaperId: z.string().uuid(),
+      duplicatePaperIds: z.array(z.string().uuid()).min(1).max(99),
+      reason: duplicateResolutionReasonSchema,
+    }),
+  ])
+  .superRefine((input, context) => {
+    const paperIds =
+      input.resolution === "keep_both"
+        ? input.paperIds
+        : [input.canonicalPaperId, ...input.duplicatePaperIds];
+
+    if (new Set(paperIds).size !== paperIds.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Paper IDs must be unique",
+        path: [input.resolution === "keep_both" ? "paperIds" : "duplicatePaperIds"],
+      });
+    }
+  });
 
 function countDuplicateValues(values: Array<string | null>) {
   const counts = new Map<string, number>();
@@ -87,19 +127,6 @@ function countDuplicateSourceIdentifiers(
   }
 
   return { groups, papers: paperIds.size };
-}
-
-function normalizeTitleCandidate(value: string) {
-  const normalized = value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const words = normalized.split(" ").filter(Boolean);
-
-  return normalized.length >= 20 && words.length >= 4 ? normalized : null;
 }
 
 function normalizeSourceIdentifier(providerValue: string, externalIdValue: string) {
@@ -172,6 +199,7 @@ export const adminDataQualityRouter = router({
       workflowGroups,
       pendingOlderThanSevenDays,
       integrityRows,
+      resolvedDuplicateGroups,
     ] = await Promise.all([
       prisma.paperClassification.groupBy({
         by: ["classificationVersion"],
@@ -198,8 +226,10 @@ export const adminDataQualityRouter = router({
       }),
       prisma.paper.findMany({
         select: {
+          id: true,
           doi: true,
           title: true,
+          status: true,
         },
       }),
       prisma.paperSource.findMany({
@@ -236,6 +266,10 @@ export const adminDataQualityRouter = router({
             (SELECT COUNT(*) FROM reading_progress rp JOIN papers p ON p.id = rp.paper_id WHERE p.status <> 'published')
           ) AS "userRelationsOnUnpublishedPapers"
       `,
+      prisma.duplicateGroupResolution.findMany({
+        where: { resolution: "keep_both" },
+        select: { groupFingerprint: true },
+      }),
     ]);
 
     const workflowCounts = new Map(workflowGroups.map((group) => [group.status, group._count._all]));
@@ -289,15 +323,16 @@ export const adminDataQualityRouter = router({
 
     const doiDuplicates = countDuplicateValues(paperIdentifiers.map((paper) => normalizeDoi(paper.doi)));
     const externalIdDuplicates = countDuplicateSourceIdentifiers(sourceIdentifiers);
-    const titleDuplicates = countDuplicateValues(
-      paperIdentifiers.map((paper) => normalizeTitleCandidate(paper.title)),
+    const titleDuplicates = excludeResolvedDuplicateGroups(
+      buildDuplicateTitleGroups(paperIdentifiers),
+      new Set(resolvedDuplicateGroups.map((resolution) => resolution.groupFingerprint)),
     );
     const duplicates = {
       duplicateDoiGroups: doiDuplicates.groups,
       duplicateDoiPapers: doiDuplicates.papers,
       duplicateExternalIdGroups: externalIdDuplicates.groups,
       duplicateExternalIdPapers: externalIdDuplicates.papers,
-      duplicateTitleCandidateGroups: titleDuplicates.groups,
+      duplicateTitleCandidateGroups: titleDuplicates.length,
     };
 
     const workflow = {
@@ -462,29 +497,25 @@ export const adminDataQualityRouter = router({
       }
 
       if (input.issue === "duplicate-title") {
-        const titleCandidates = await prisma.paper.findMany({
-          select: {
-            id: true,
-            title: true,
-          },
-        });
-        const candidateGroups = new Map<string, string[]>();
-
-        for (const paper of titleCandidates) {
-          const normalizedTitle = normalizeTitleCandidate(paper.title);
-          if (!normalizedTitle) {
-            continue;
-          }
-
-          const paperIds = candidateGroups.get(normalizedTitle) ?? [];
-          paperIds.push(paper.id);
-          candidateGroups.set(normalizedTitle, paperIds);
-        }
-
-        const duplicateGroups = Array.from(candidateGroups.entries()).filter(
-          ([, paperIds]) => paperIds.length >= 2,
+        const [titleCandidates, resolvedGroups] = await Promise.all([
+          prisma.paper.findMany({
+            where: { status: { not: "inactive" } },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+            },
+          }),
+          prisma.duplicateGroupResolution.findMany({
+            where: { resolution: "keep_both" },
+            select: { groupFingerprint: true },
+          }),
+        ]);
+        const duplicateGroups = excludeResolvedDuplicateGroups(
+          buildDuplicateTitleGroups(titleCandidates),
+          new Set(resolvedGroups.map((resolution) => resolution.groupFingerprint)),
         );
-        const duplicatePaperIds = duplicateGroups.flatMap(([, paperIds]) => paperIds);
+        const duplicatePaperIds = duplicateGroups.flatMap((group) => group.paperIds);
 
         if (duplicatePaperIds.length === 0) {
           return {
@@ -534,10 +565,10 @@ export const adminDataQualityRouter = router({
         });
         const paperById = new Map(papers.map((paper) => [paper.id, paper]));
         const groups = duplicateGroups
-          .map(([normalizedTitle, paperIds]) => ({
-            groupKey: normalizedTitle,
-            normalizedTitle,
-            papers: paperIds.flatMap((paperId) => {
+          .map((group) => ({
+            groupKey: group.groupKey,
+            normalizedTitle: group.normalizedTitle,
+            papers: group.paperIds.flatMap((paperId) => {
               const paper = paperById.get(paperId);
               if (!paper) {
                 return [];
@@ -623,4 +654,7 @@ export const adminDataQualityRouter = router({
         })),
       };
     }),
+  resolveDuplicateGroup: adminProcedure
+    .input(resolveDuplicateGroupInputSchema)
+    .mutation(async ({ ctx, input }) => resolveDuplicateGroup(ctx.adminUser.id, input)),
 });
