@@ -12,6 +12,13 @@ import {
   type PaperDifficultyClassification,
 } from "./paper-difficulty-classifier";
 import { BackendProfiler, formatProfileSummary } from "./backend-profiler";
+import {
+  getClassificationClientErrorMessage,
+  getClassificationErrorType,
+  PaperClassificationServiceError,
+} from "./classification-errors";
+
+export { PaperClassificationServiceError } from "./classification-errors";
 
 const CLASSIFICATION_BATCH_CONCURRENCY = 8;
 export const CLASSIFICATION_VERSION = "rule-based-v2.1.4";
@@ -24,16 +31,6 @@ export interface ClassifyPaperByIdOptions {
     adminUserId: string;
     action: "paper_reclassified";
   };
-}
-
-export class PaperClassificationServiceError extends Error {
-  constructor(
-    public readonly code: "PAPER_NOT_FOUND" | "PAPER_INACTIVE" | "PAPER_STATUS_NOT_ALLOWED",
-    message: string,
-  ) {
-    super(message);
-    this.name = "PaperClassificationServiceError";
-  }
 }
 
 export interface ClassifyPendingPapersInput {
@@ -134,8 +131,12 @@ function buildClassificationData(
   };
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+function logClassificationFailure(paperId: string, error: unknown) {
+  console.error("[Classification Error]", {
+    operation: "classification_batch_item",
+    paperId,
+    errorType: getClassificationErrorType(error),
+  });
 }
 
 function runProfiledSync<TResult>(
@@ -213,7 +214,8 @@ async function classifyPaperByIdWithProfiler(
       }),
     );
   } catch (error) {
-    const rejectionReason = `Classification could not be performed: ${getErrorMessage(error)}`;
+    logClassificationFailure(paper.id, error);
+    const rejectionReason = getClassificationClientErrorMessage(error);
 
     await runProfiled(profiler, "database_write_per_paper", () =>
       prisma.$transaction(async (transaction) => {
@@ -436,7 +438,10 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
         }
       } else {
         totalFailed += 1;
-        errors.push(`Failed to classify paper ${outcome.paperId}: ${getErrorMessage(outcome.error)}`);
+        logClassificationFailure(outcome.paperId, outcome.error);
+        errors.push(
+          `Failed to classify paper ${outcome.paperId}: ${getClassificationClientErrorMessage(outcome.error)}`,
+        );
       }
     }
 

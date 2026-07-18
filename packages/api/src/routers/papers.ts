@@ -3,13 +3,14 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { publicProcedure, router } from "../index";
+import { paperSearchQuerySchema } from "../paper-search-validation";
 import { difficultyLevelSchema, paperSortSchema, toStringArray, type ReadingStatusValue } from "./shared";
 
 export const papersRouter = router({
   list: publicProcedure
     .input(
       z.object({
-        q: z.string().trim().optional(),
+        q: paperSearchQuerySchema,
         categoryId: z.string().uuid().optional(),
         difficulty: difficultyLevelSchema.optional(),
         sort: paperSortSchema.default("newest"),

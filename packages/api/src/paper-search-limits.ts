@@ -1,0 +1,1 @@
+export const MAX_PAPER_SEARCH_LENGTH = 200;

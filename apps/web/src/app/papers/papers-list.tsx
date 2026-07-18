@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_PAPER_SEARCH_LENGTH } from "@deepread/api/paper-search-limits";
 import { Button } from "@deepread/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@deepread/ui/components/card";
 import { Input } from "@deepread/ui/components/input";
@@ -236,6 +237,7 @@ export default function PapersList({ initialFilters }: PapersListProps) {
             <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               className="h-10 rounded-md bg-background pl-8 text-sm"
+              maxLength={MAX_PAPER_SEARCH_LENGTH}
               onChange={(event) =>
                 setDraftFilters((current) => ({ ...current, q: event.target.value }))
               }
