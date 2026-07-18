@@ -10,11 +10,13 @@
     }
   },
   "scripts": {
+    "check-types": "tsc --noEmit --declaration false --declarationMap false --composite false",
     "db:push": "bunx --bun prisma db push",
     "db:generate": "bunx --bun prisma generate",
     "db:migrate": "bunx --bun prisma migrate dev",
     "db:seed": "bunx --bun prisma db seed",
     "db:format": "bunx --bun prisma format",
+    "db:validate": "bunx --bun prisma validate",
     "postinstall": "bunx --bun prisma generate",
     "db:studio": "bunx --bun prisma studio"
   },

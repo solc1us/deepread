@@ -9,7 +9,9 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "check-types": "tsc --noEmit --declaration false --declarationMap false --composite false"
+  },
   "dependencies": {
     "@deepread/db": "workspace:*",
     "@deepread/env": "workspace:*",

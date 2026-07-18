@@ -1,0 +1,8 @@
+warning: in the working copy of 'apps/server/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/api/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/auth/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/db/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'packages/env/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'turbo.json', LF will be replaced by CRLF the next time Git touches it

@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsdown",
-    "check-types": "tsc -b",
+    "check-types": "tsc --noEmit --composite false",
     "classifier:export-v2": "bun run src/scripts/export-classifier-v2-evaluation.ts",
     "classifier:reclassify-legacy": "bun run src/scripts/reclassify-legacy-papers.ts",
     "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
