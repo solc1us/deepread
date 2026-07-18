@@ -23,7 +23,9 @@ Core MVP:
 - profile
 - reading statistics
 - admin monitoring and pipeline controls
-- admin data-quality audit and remediation
+- admin data-quality audit and drill-down
+- admin metadata and review remediation
+- safe duplicate resolution
 
 ---
 
@@ -51,8 +53,6 @@ Important:
 
 ## Completed Phases
 
-## Completed Phases
-
 Completed:
 
 - Phase 1: project setup, database, Better Auth, user/admin roles
@@ -64,14 +64,11 @@ Completed:
 - Phase 7: user reading-statistics dashboard
 - Phase 8: admin monitoring dashboard, pipeline controls, logs, paper monitor, and database-health status
 - Phase 9: classifier evaluation and calibration, production classifier v2.1.4, paper-status workflow, legacy reclassification, backend profiling, and bounded-concurrency optimization
+- Phase 10: dataset distribution audit, permanent data-quality monitoring, issue drill-downs, metadata remediation, needs-review workflow, safe duplicate resolution, cleanup, manual relevance spot-check, and final dataset audit
 
 In progress:
 
-- Phase 10: data-quality audit, issue drill-down, admin remediation, metadata cleanup, duplicate review, manual relevance spot-check, and dataset freeze
-
-Planned:
-
-- Phase 11: final testing, hardening, deployment, and documentation update
+- Phase 11: final testing, hardening, deployment, and documentation
 
 Deferred:
 
@@ -106,6 +103,9 @@ Admin:
 - `/admin/logs`
 - `/admin/classification`
 - `/admin/papers`
+- `/admin/papers/[id]`
+- `/admin/data-quality`
+- `/admin/data-quality/details`
 
 Navigation behavior:
 
@@ -125,10 +125,19 @@ Admin:
 - `admin.ingestion.logs`
 - `admin.logs.list`
 - `admin.papers.list`
+- `admin.papers.detail`
+- `admin.papers.updateMetadata`
+- `admin.papers.reclassify`
+- `admin.papers.manualClassifyAndPublish`
+- `admin.papers.deactivate`
+- `admin.papers.reactivate`
+- `admin.papers.reject`
+- `admin.papers.publish` (direct-publication guard)
 - `admin.classification.runForPaper`
 - `admin.classification.runBatch`
 - `admin.dataQuality.getOverview`
 - `admin.dataQuality.getDetails`
+- `admin.dataQuality.resolveDuplicateGroup`
 
 User:
 
@@ -184,6 +193,7 @@ Rules:
 - OpenAlex database writes use bounded concurrency of 8.
 - Batch classification uses bounded concurrency of 8.
 - Production classifier version is `rule-based-v2.1.4`.
+- Manual admin classification uses `manual-admin-v1`.
 - Difficulty classification is metadata-only.
 - Papers failing the classifier quality gate use `needs_review`.
 - Public paper queries expose only `published` papers.
@@ -193,7 +203,11 @@ Rules:
   - `published`
   - `rejected`
   - `inactive`
-- Existing published paper IDs and user relations must be preserved during cleanup.
+- `needs_review` papers require successful rule-based reclassification or explicit manual admin classification before publication.
+- Paper IDs, sources, bookmarks, notes, and reading progress must be preserved during remediation.
+- Duplicate-title matches are review candidates, not automatically confirmed duplicates.
+- Confirmed duplicate merges preserve the selected paper, safely move or deduplicate sources and user relations, and mark duplicate papers inactive.
+- Hard deletion is not part of the current remediation flow.
 - Do not delete and re-ingest papers to reclassify them.
 - Do not parse or store PDFs.
 - Users read through external source/PDF links.
@@ -202,6 +216,7 @@ Rules:
 - Completed means status `completed`, progress `100`, and sets `completed_at`.
 - Statistics reading time is estimated, not real tracked duration.
 - Admin tools include monitoring, pipeline control, data-quality auditing, and controlled remediation.
+- Optional classification and ingestion profiling exists but defaults to disabled.
 - No external AI/LLM APIs are used by the classifier.
 - No workers, scheduler, or additional infrastructure unless explicitly requested.
 
@@ -274,17 +289,23 @@ Rule:
 - Preserve existing tRPC paths.
 - Avoid circular imports.
 
-## Current Phase 10 Rules
+## Final Dataset State
 
-- Dataset currently contains approximately 1,500 published papers.
-- Every published paper should have a complete classification.
-- Current production classification version is `rule-based-v2.1.4`.
-- Data Quality overview and drill-down pages are permanent admin features.
-- Data-quality remediation must preserve paper IDs and user relations.
-- Missing metadata may be edited by admins with field-specific validation.
-- `needs_review` papers may only become published after:
-  - successful rule-based reclassification; or
-  - explicit manual admin classification.
-- Probable duplicate-title matches are review candidates, not automatically confirmed duplicates.
-- Do not hard-delete duplicate papers before relations and sources are handled safely.
-- Targeted ingestion should only be performed when the audit identifies a real dataset gap.
+- Phase 10 remediation and final audit are complete.
+- Published papers must have a complete classification.
+- Rule-based output uses `rule-based-v2.1.4`.
+- Manual admin output uses `manual-admin-v1`.
+- Data Quality and drill-down pages are permanent admin tools.
+- Missing metadata, needs-review papers, and duplicate candidates are handled through controlled admin workflows.
+- Cleanup must preserve paper IDs, sources, bookmarks, notes, and reading progress.
+- New ingestion should be targeted and justified by a real dataset gap.
+
+## Current Phase 11 Focus
+
+- automated and end-to-end testing
+- security and access-control hardening
+- production environment validation
+- deployment readiness
+- logging and failure handling
+- final documentation
+- final acceptance testing
