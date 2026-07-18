@@ -10,10 +10,16 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { AlertCircle, ArrowLeft, ArrowUpRight, RefreshCw } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
+import { useState } from "react";
 
 import { trpc } from "@/utils/trpc";
 
 import { AdminPageHeader, AdminStatusBadge } from "./admin-ui";
+import {
+  DuplicateResolutionNotice,
+  DuplicateTitleResolutionActions,
+  type ResolveDuplicateResult,
+} from "./duplicate-title-resolution";
 import { PaperMetadataEditor } from "./paper-metadata-editor";
 
 export type DataQualityDetailIssue =
@@ -74,7 +80,7 @@ const issueContent: Record<DataQualityDetailIssue, { title: string; description:
   },
   "duplicate-title": {
     title: "Probable Duplicate Titles",
-    description: "Conservative normalized-title matches for read-only administrative review.",
+    description: "Conservative normalized-title matches for explicit administrative review and resolution.",
     empty: "No probable duplicate-title groups were found.",
   },
   "unpublished-user-relations": {
@@ -258,6 +264,17 @@ function DuplicateTitleGroups({
 }: {
   groups: DuplicateTitleGroup[];
 }) {
+  const [resolvedGroupIdentities, setResolvedGroupIdentities] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [lastResolution, setLastResolution] = useState<{
+    groupTitle: string;
+    result: ResolveDuplicateResult;
+  } | null>(null);
+  const visibleGroups = groups.filter(
+    (group) => !resolvedGroupIdentities.has(duplicateGroupIdentity(group)),
+  );
+
   return (
     <section className="grid gap-4">
       <Card className="rounded-lg border-border/80 shadow-sm">
@@ -266,8 +283,19 @@ function DuplicateTitleGroups({
         </CardContent>
       </Card>
 
-      {groups.map((group, index) => (
-        <details className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm" key={group.groupKey} open={index === 0}>
+      {lastResolution ? (
+        <DuplicateResolutionNotice
+          groupTitle={lastResolution.groupTitle}
+          onDismiss={() => setLastResolution(null)}
+          result={lastResolution.result}
+        />
+      ) : null}
+
+      {visibleGroups.map((group, index) => {
+        const identity = duplicateGroupIdentity(group);
+
+        return (
+          <details className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm" key={identity} open={index === 0}>
           <summary className="cursor-pointer px-4 py-3 font-medium hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
             Candidate group {index + 1} <span className="text-sm font-normal text-muted-foreground">({group.papers.length} papers)</span>
           </summary>
@@ -308,11 +336,33 @@ function DuplicateTitleGroups({
                 );
               })}
             </div>
+            <DuplicateTitleResolutionActions
+              group={group}
+              onResolved={(result) => {
+                setResolvedGroupIdentities((current) => new Set(current).add(identity));
+                setLastResolution({
+                  groupTitle: group.papers[0]?.title ?? group.normalizedTitle,
+                  result,
+                });
+              }}
+            />
           </div>
-        </details>
-      ))}
+          </details>
+        );
+      })}
+
+      {visibleGroups.length === 0 ? (
+        <EmptyState message="No unresolved probable duplicate-title groups remain in this view." />
+      ) : null}
     </section>
   );
+}
+
+function duplicateGroupIdentity(group: DuplicateTitleGroup) {
+  return `${group.groupKey}\u0000${group.papers
+    .map((paper) => paper.paperId)
+    .sort()
+    .join(",")}`;
 }
 
 function UnpublishedRelationsTable({
