@@ -27,6 +27,8 @@ menjalankan test, typecheck seluruh workspace, build web/server, dan Prisma vali
 
 **1 prompt.**
 
+[DONE]
+
 ---
 
 ## 11.2 Quick security dan error hardening
