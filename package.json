@@ -31,6 +31,10 @@
     "build": "turbo run build",
     "check-types": "turbo run check-types",
     "test": "bun test",
+    "test:integration": "bun run test:integration:access",
+    "test:integration:access": "bun run packages/api/src/test/integration/run-access-integration.ts",
+    "test:integration:migrate": "bun run packages/db/src/scripts/migrate-test-database.ts",
+    "audit:database-security": "bun run packages/db/src/scripts/audit-database-security.ts",
     "validate:prisma": "bun run db:generate && turbo run db:validate --filter=@deepread/db",
     "validate": "bun run db:generate && bun run test && bun run check-types && bun run build && turbo run db:validate --filter=@deepread/db",
     "dev:web": "turbo -F web dev",
@@ -49,6 +53,7 @@
   "devDependencies": {
     "@deepread/config": "workspace:*",
     "@types/bun": "catalog:",
+    "supabase": "^2.109.1",
     "tsx": "^4.22.4",
     "turbo": "^2.9.16",
     "typescript": "catalog:"
