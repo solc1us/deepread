@@ -6,6 +6,7 @@
     "dev": "next dev --webpack --port 3001",
     "build": "next build",
     "check-types": "tsc --noEmit --incremental false",
+    "test": "bun test --preload ./src/test/setup.ts ./src",
     "start": "next start"
   },
   "dependencies": {
@@ -30,11 +31,15 @@
   },
   "devDependencies": {
     "@deepread/config": "workspace:*",
+    "@happy-dom/global-registrator": "^20.11.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@tanstack/react-query-devtools": "^5.91.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "happy-dom": "^20.11.0",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
   }
