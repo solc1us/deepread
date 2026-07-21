@@ -24,6 +24,7 @@ export const CLASSIFICATION_BATCH_CONCURRENCY = 8;
 export const CLASSIFICATION_VERSION = "rule-based-v2.1.4";
 
 interface ClassificationBatchTestOptions {
+  afterFetch?: (paperIds: string[]) => Promise<void>;
   beforePaper?: (paperId: string) => Promise<void>;
   afterPaper?: (paperId: string) => Promise<void>;
 }
@@ -59,9 +60,14 @@ export interface ClassifyPendingPapersResult {
   totalNeedsReview: number;
   totalRejected: number;
   totalFailed: number;
+  totalSkipped: number;
   reviews: Array<{
     paperId: string;
     reasons: string[];
+  }>;
+  skipped: Array<{
+    paperId: string;
+    reason: "already_claimed";
   }>;
   errors: string[];
 }
@@ -383,7 +389,9 @@ async function classifyPendingPapersInternal(
   let totalNeedsReview = 0;
   let totalRejected = 0;
   let totalFailed = 0;
+  let totalSkipped = 0;
   const reviews: ClassifyPendingPapersResult["reviews"] = [];
+  const skipped: ClassifyPendingPapersResult["skipped"] = [];
   const errors: string[] = [];
   let profileStatus: "success" | "partial" | "failed" = "failed";
 
@@ -406,17 +414,39 @@ async function classifyPendingPapersInternal(
     const pendingPapers = await runProfiled(profiler, "database_fetch", fetchPendingPapers);
     const paperIds = [...new Set(pendingPapers.map((paper) => paper.id))];
     totalFound = paperIds.length;
+    await testOptions?.afterFetch?.(paperIds);
 
     const outcomes = await mapWithConcurrency(
       paperIds,
       CLASSIFICATION_BATCH_CONCURRENCY,
       async (paperId) => {
+        let claimed = false;
         try {
+          const claim = await prisma.paper.updateMany({
+            where: {
+              id: paperId,
+              status: "pending",
+            },
+            data: {
+              status: "needs_review",
+            },
+          });
+
+          if (claim.count !== 1) {
+            return {
+              outcome: "skipped",
+              paperId,
+            } as const;
+          }
+
+          claimed = true;
           await testOptions?.beforePaper?.(paperId);
           return {
             outcome: "success",
             paperId,
-            result: await classifyPaperByIdWithProfiler(paperId, profiler),
+            result: await classifyPaperByIdWithProfiler(paperId, profiler, {
+              allowedStatuses: ["needs_review"],
+            }),
           } as const;
         } catch (error) {
           return {
@@ -425,13 +455,21 @@ async function classifyPendingPapersInternal(
             error,
           } as const;
         } finally {
-          await testOptions?.afterPaper?.(paperId);
+          if (claimed) {
+            await testOptions?.afterPaper?.(paperId);
+          }
         }
       },
     );
 
     for (const outcome of outcomes) {
-      if (outcome.outcome === "success") {
+      if (outcome.outcome === "skipped") {
+        totalSkipped += 1;
+        skipped.push({
+          paperId: outcome.paperId,
+          reason: "already_claimed",
+        });
+      } else if (outcome.outcome === "success") {
         const { paperId, result } = outcome;
 
         if (result.status === "published") {
@@ -465,7 +503,9 @@ async function classifyPendingPapersInternal(
       totalNeedsReview,
       totalRejected,
       totalFailed,
+      totalSkipped,
       reviews,
+      skipped,
       errors,
     };
   } finally {
@@ -476,8 +516,9 @@ async function classifyPendingPapersInternal(
           metadata: {
             status: profileStatus,
             papers_found: totalFound,
-            successful: totalFound - totalFailed,
+            successful: totalFound - totalFailed - totalSkipped,
             failed: totalFailed,
+            skipped: totalSkipped,
             needs_review: totalNeedsReview,
             published: totalPublished,
             concurrency: CLASSIFICATION_BATCH_CONCURRENCY,

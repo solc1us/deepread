@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import prisma from "@deepread/db";
 import { env } from "@deepread/env/server";
 
@@ -47,6 +49,16 @@ export interface OpenAlexIngestionResult {
     duplicates: number;
     invalid: number;
   };
+  logPersistence:
+    | {
+        status: "persisted";
+        operationId: string;
+      }
+    | {
+        status: "failed";
+        operationId: string;
+        message: string;
+      };
   errors?: string[];
 }
 
@@ -55,6 +67,7 @@ interface OpenAlexIngestionTestOptions {
   beforeDatabaseWrites?: (papers: NormalizedOpenAlexPaper[]) => Promise<void>;
   beforePaperSave?: (paper: NormalizedOpenAlexPaper) => Promise<void>;
   afterPaperSave?: (paper: NormalizedOpenAlexPaper) => Promise<void>;
+  beforeIngestionLogPersist?: (attempt: number) => Promise<void>;
 }
 
 function normalizeLimit(limit?: number) {
@@ -337,19 +350,70 @@ async function saveOpenAlexPaper(paper: NormalizedOpenAlexPaper, categoryId: str
   });
 }
 
-async function createIngestionLog(result: OpenAlexIngestionResult, startedAt: Date, finishedAt: Date) {
-  await prisma.ingestionLog.create({
-    data: {
-      provider: result.provider,
-      status: result.status,
-      totalFetched: result.totalFetched,
-      totalSaved: result.totalSaved,
-      totalRejected: result.totalRejected,
-      errorMessage: result.errors?.join("\n") ?? null,
-      startedAt,
-      finishedAt,
+type IngestionResultBeforeLog = Omit<OpenAlexIngestionResult, "logPersistence">;
+
+async function createIngestionLog(
+  operationId: string,
+  result: IngestionResultBeforeLog,
+  startedAt: Date,
+  finishedAt: Date,
+) {
+  const data = {
+    provider: result.provider,
+    status: result.status,
+    totalFetched: result.totalFetched,
+    totalSaved: result.totalSaved,
+    totalRejected: result.totalRejected,
+    errorMessage: result.errors?.join("\n") ?? null,
+    startedAt,
+    finishedAt,
+  };
+
+  await prisma.ingestionLog.upsert({
+    where: { id: operationId },
+    create: {
+      id: operationId,
+      ...data,
     },
+    update: data,
   });
+}
+
+async function finalizeIngestionLog(
+  operationId: string,
+  result: IngestionResultBeforeLog,
+  startedAt: Date,
+  finishedAt: Date,
+  testOptions?: OpenAlexIngestionTestOptions,
+): Promise<OpenAlexIngestionResult["logPersistence"]> {
+  const maximumAttempts = 2;
+
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    try {
+      await testOptions?.beforeIngestionLogPersist?.(attempt);
+      await createIngestionLog(operationId, result, startedAt, finishedAt);
+      return {
+        status: "persisted",
+        operationId,
+      };
+    } catch (error) {
+      if (attempt === maximumAttempts) {
+        console.error("[OpenAlex Ingestion Log] Finalization failed", {
+          operation: "openalex_ingestion_log_finalize",
+          operationId,
+          ingestionStatus: result.status,
+          attempts: maximumAttempts,
+          errorType: error instanceof Error ? error.name : typeof error,
+        });
+      }
+    }
+  }
+
+  return {
+    status: "failed",
+    operationId,
+    message: "The ingestion result is available, but its operation log could not be persisted.",
+  };
 }
 
 async function runOpenAlexIngestionInternal(
@@ -357,6 +421,7 @@ async function runOpenAlexIngestionInternal(
   testOptions?: OpenAlexIngestionTestOptions,
 ): Promise<OpenAlexIngestionResult> {
   const profiler = env.OPENALEX_INGESTION_PROFILING ? new BackendProfiler() : undefined;
+  const operationId = randomUUID();
   const startedAt = new Date();
   const errors: string[] = [];
   const limit = normalizeLimit(input.limit);
@@ -382,7 +447,7 @@ async function runOpenAlexIngestionInternal(
       invalidCount += unaccounted;
     }
 
-    const result: OpenAlexIngestionResult = {
+    const result: IngestionResultBeforeLog = {
       provider: OPENALEX_PROVIDER,
       status,
       totalFetched,
@@ -395,8 +460,17 @@ async function runOpenAlexIngestionInternal(
       ...(errors.length > 0 ? { errors } : {}),
     };
 
-    await createIngestionLog(result, startedAt, new Date());
-    return result;
+    const logPersistence = await finalizeIngestionLog(
+      operationId,
+      result,
+      startedAt,
+      new Date(),
+      testOptions,
+    );
+    return {
+      ...result,
+      logPersistence,
+    };
   };
 
   try {

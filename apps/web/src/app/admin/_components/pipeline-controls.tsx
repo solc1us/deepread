@@ -44,6 +44,11 @@ type IngestionControlResult = {
 		duplicates: number;
 		invalid: number;
 	};
+	logPersistence: {
+		status: "persisted" | "failed";
+		operationId: string;
+		message?: string;
+	};
 	errors?: string[];
 };
 
@@ -54,6 +59,7 @@ type ClassificationBatchResult = {
 	totalNeedsReview: number;
 	totalRejected: number;
 	totalFailed: number;
+	totalSkipped: number;
 	errors?: string[];
 };
 
@@ -417,6 +423,11 @@ export default function PipelineControls() {
 										</div>
 									))}
 								</dl>
+								{ingestionResult.logPersistence.status === "failed" ? (
+									<p className="rounded-md bg-amber-500/10 p-2 text-xs leading-5 text-amber-800 dark:text-amber-300">
+										{ingestionResult.logPersistence.message}
+									</p>
+								) : null}
 								{ingestionResult.errors?.length ? (
 									<div className="grid gap-1 text-xs leading-5 text-destructive">
 										{ingestionResult.errors.map((error) => (
@@ -523,6 +534,7 @@ export default function PipelineControls() {
 										["Needs review", classificationResult.totalNeedsReview],
 										["Rejected", classificationResult.totalRejected],
 										["Failed", classificationResult.totalFailed],
+										["Already claimed", classificationResult.totalSkipped],
 									].map(([label, value]) => (
 										<div
 											className="flex items-center justify-between gap-4 py-2"

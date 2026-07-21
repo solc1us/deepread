@@ -191,6 +191,12 @@ describe("OpenAlex ingestion", () => {
     expect(OPENALEX_REQUEST_MAX_LIMIT).toBe(100);
     expect("rawMetadata" in result).toBe(false);
     expect(JSON.stringify(result)).not.toContain("test_private_metadata");
+    expect(result.logPersistence.status).toBe("persisted");
+    expect(
+      await fixturePrisma.ingestionLog.count({
+        where: { id: result.logPersistence.operationId },
+      }),
+    ).toBe(1);
   });
 
   test("enforces the 1-500 application limit without contacting OpenAlex", async () => {
@@ -309,6 +315,54 @@ describe("OpenAlex ingestion", () => {
       skipped: { duplicates: 2, invalid: 0 },
     });
   });
+
+  test("keeps saved papers when log finalization fails and retry remains idempotent", async () => {
+    const work = openAlexWork("log-finalization-failure");
+    const requests: URL[] = [];
+    const failedLogResult = await runOpenAlexIngestionForTest(
+      { categoryId: fixtures!.categoryId, query: "isolated log failure", limit: 1 },
+      {
+        fetcher: mockOpenAlexPages([[work]], requests),
+        beforeIngestionLogPersist: async () => {
+          throw new Error(
+            "Prisma Invalid invocation C:\\private\\node_modules SELECT DATABASE_URL",
+          );
+        },
+      },
+    );
+
+    expect(failedLogResult.status).toBe("success");
+    expect(failedLogResult.totalSaved).toBe(1);
+    expect(failedLogResult.logPersistence.status).toBe("failed");
+    if (failedLogResult.logPersistence.status !== "failed") {
+      throw new Error("Expected the injected ingestion-log finalization failure.");
+    }
+    expect(failedLogResult.logPersistence.message).toBe(
+      "The ingestion result is available, but its operation log could not be persisted.",
+    );
+    expect(JSON.stringify(failedLogResult)).not.toMatch(
+      /Prisma|Invalid invocation|C:\\|node_modules|SELECT|DATABASE_URL/,
+    );
+    expect(
+      await fixturePrisma.ingestionLog.count({
+        where: { id: failedLogResult.logPersistence.operationId },
+      }),
+    ).toBe(0);
+    expect(await fixturePrisma.paper.count({ where: { title: String(work.display_name) } })).toBe(1);
+
+    const retryResult = await runOpenAlexIngestionForTest(
+      { categoryId: fixtures!.categoryId, query: "isolated log failure retry", limit: 1 },
+      { fetcher: mockOpenAlexPages([[work]], requests) },
+    );
+    expect(retryResult).toMatchObject({
+      status: "success",
+      totalFetched: 1,
+      totalSaved: 0,
+      skipped: { duplicates: 1, invalid: 0 },
+      logPersistence: { status: "persisted" },
+    });
+    expect(await fixturePrisma.paper.count({ where: { title: String(work.display_name) } })).toBe(1);
+  });
 });
 
 describe("classification pipeline", () => {
@@ -422,12 +476,97 @@ describe("classification pipeline", () => {
     expect(result.totalFound).toBe(10);
     expect(result.totalFailed).toBe(1);
     expect(result.totalPublished).toBe(9);
+    expect(result.totalSkipped).toBe(0);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toContain("Classification failed due to an internal processing error.");
     expect(result.errors[0]).not.toMatch(/Prisma|Invalid invocation|C:\\|node_modules|SELECT|DATABASE_URL/);
     expect((await fixturePrisma.paper.findUnique({ where: { id: failedPaperId } }))?.status).toBe(
-      "pending",
+      "needs_review",
     );
+  });
+
+  test("overlapping batches atomically claim each pending paper once", async () => {
+    const category = await createCategory("overlapping batch category");
+    const papers = await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        fixturePrisma.paper.create({
+          data: {
+            id: randomUUID(),
+            title: `${fixtures!.runId} overlapping classification ${index}`,
+            abstract: buildClassifiableAbstract(`overlap-${index}`),
+            authors: ["Concurrent Batch Author"],
+            publicationYear: 2026,
+            sourceName: "Integration test",
+            sourceUrl: `https://example.test/${fixtures!.runId}/overlap-${index}`,
+            categoryId: category.id,
+            status: "pending",
+          },
+        }),
+      ),
+    );
+    let fetchedBatchCount = 0;
+    let releaseBatches: (() => void) | undefined;
+    const bothBatchesFetched = new Promise<void>((resolve) => {
+      releaseBatches = resolve;
+    });
+    const afterFetch = async (paperIds: string[]) => {
+      expect(paperIds).toHaveLength(papers.length);
+      fetchedBatchCount += 1;
+      if (fetchedBatchCount === 2) {
+        releaseBatches?.();
+      }
+      await bothBatchesFetched;
+    };
+
+    const [first, second] = await Promise.all([
+      classifyPendingPapersForTest(
+        { categoryId: category.id, limit: papers.length },
+        { afterFetch },
+      ),
+      classifyPendingPapersForTest(
+        { categoryId: category.id, limit: papers.length },
+        { afterFetch },
+      ),
+    ]);
+    const results = [first, second];
+    const processed = results.reduce(
+      (total, result) =>
+        total +
+        result.totalPublished +
+        result.totalNeedsReview +
+        result.totalRejected +
+        result.totalFailed,
+      0,
+    );
+
+    expect(processed).toBe(papers.length);
+    expect(results.reduce((total, result) => total + result.totalSkipped, 0)).toBe(papers.length);
+    for (const result of results) {
+      expect(result.totalFound).toBe(
+        result.totalPublished +
+          result.totalNeedsReview +
+          result.totalRejected +
+          result.totalFailed +
+          result.totalSkipped,
+      );
+      expect(result.skipped).toHaveLength(result.totalSkipped);
+      expect(result.skipped.every((item) => item.reason === "already_claimed")).toBe(true);
+    }
+    expect(
+      await fixturePrisma.paperClassification.count({
+        where: { paperId: { in: papers.map((paper) => paper.id) } },
+      }),
+    ).toBe(papers.length);
+    expect(
+      await fixturePrisma.paper.count({
+        where: { id: { in: papers.map((paper) => paper.id) }, status: "published" },
+      }),
+    ).toBe(papers.length);
+    expect(
+      await fixturePrisma.adminPaperAuditLog.count({
+        where: { paperId: { in: papers.map((paper) => paper.id) } },
+      }),
+    ).toBe(0);
   });
 });
 
