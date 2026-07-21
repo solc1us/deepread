@@ -50,6 +50,13 @@ export interface OpenAlexIngestionResult {
   errors?: string[];
 }
 
+interface OpenAlexIngestionTestOptions {
+  fetcher?: typeof fetch;
+  beforeDatabaseWrites?: (papers: NormalizedOpenAlexPaper[]) => Promise<void>;
+  beforePaperSave?: (paper: NormalizedOpenAlexPaper) => Promise<void>;
+  afterPaperSave?: (paper: NormalizedOpenAlexPaper) => Promise<void>;
+}
+
 function normalizeLimit(limit?: number) {
   const rawLimit = limit ?? OPENALEX_INGESTION_DEFAULT_LIMIT;
 
@@ -345,7 +352,10 @@ async function createIngestionLog(result: OpenAlexIngestionResult, startedAt: Da
   });
 }
 
-export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Promise<OpenAlexIngestionResult> {
+async function runOpenAlexIngestionInternal(
+  input: RunOpenAlexIngestionInput,
+  testOptions?: OpenAlexIngestionTestOptions,
+): Promise<OpenAlexIngestionResult> {
   const profiler = env.OPENALEX_INGESTION_PROFILING ? new BackendProfiler() : undefined;
   const startedAt = new Date();
   const errors: string[] = [];
@@ -424,6 +434,7 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
             query,
             limit: pageLimit,
             page,
+            ...(testOptions?.fetcher ? { fetcher: testOptions.fetcher } : {}),
           });
         const response = profiler
           ? await profiler.measure("openalex_fetch", fetchPage)
@@ -484,10 +495,13 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
       papersToSave.push(paper);
     }
 
+    await testOptions?.beforeDatabaseWrites?.(papersToSave);
+
     const saveResults = await mapWithConcurrency(
       papersToSave,
       OPENALEX_INGESTION_CONCURRENCY,
       async (paper): Promise<SaveResult> => {
+        await testOptions?.beforePaperSave?.(paper);
         try {
           const savePaper = () => saveOpenAlexPaper(paper, input.categoryId, fetchedAt);
           if (profiler) {
@@ -506,6 +520,8 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
             type: "failed",
             error: `OpenAlex work ${paper.openAlexId} could not be saved.`,
           };
+        } finally {
+          await testOptions?.afterPaperSave?.(paper);
         }
       },
     );
@@ -577,4 +593,21 @@ export async function runOpenAlexIngestion(input: RunOpenAlexIngestionInput): Pr
       );
     }
   }
+}
+
+export async function runOpenAlexIngestion(
+  input: RunOpenAlexIngestionInput,
+): Promise<OpenAlexIngestionResult> {
+  return await runOpenAlexIngestionInternal(input);
+}
+
+export async function runOpenAlexIngestionForTest(
+  input: RunOpenAlexIngestionInput,
+  options: OpenAlexIngestionTestOptions,
+): Promise<OpenAlexIngestionResult> {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("The OpenAlex ingestion test entry point is available only in test mode.");
+  }
+
+  return await runOpenAlexIngestionInternal(input, options);
 }

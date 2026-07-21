@@ -390,6 +390,7 @@ async function recordMerge(
   input: MergeInput,
   group: DuplicateTitleGroup,
   suppliedPapers: Awaited<ReturnType<typeof validateCurrentGroup>>["suppliedPapers"],
+  beforeFinalize?: () => Promise<void>,
 ) {
   const canonical = suppliedPapers.find((paper) => paper.id === input.canonicalPaperId);
   if (!canonical || input.duplicatePaperIds.includes(input.canonicalPaperId)) {
@@ -425,6 +426,7 @@ async function recordMerge(
     input.canonicalPaperId,
     duplicatePaperIds,
   );
+  await beforeFinalize?.();
   const inactive = await transaction.paper.updateMany({
     where: {
       id: { in: duplicatePaperIds },
@@ -495,9 +497,10 @@ async function recordMerge(
   };
 }
 
-export async function resolveDuplicateGroup(
+async function resolveDuplicateGroupInternal(
   adminUserId: string,
   input: DuplicateGroupResolutionInput,
+  beforeFinalizeMerge?: () => Promise<void>,
 ) {
   try {
     return await prisma.$transaction(
@@ -517,6 +520,7 @@ export async function resolveDuplicateGroup(
               input,
               validated.currentGroup,
               validated.suppliedPapers,
+              beforeFinalizeMerge,
             );
       },
       { isolationLevel: "Serializable" },
@@ -548,4 +552,24 @@ export async function resolveDuplicateGroup(
       message: "Failed to resolve duplicate group",
     });
   }
+}
+
+export async function resolveDuplicateGroup(
+  adminUserId: string,
+  input: DuplicateGroupResolutionInput,
+) {
+  return await resolveDuplicateGroupInternal(adminUserId, input);
+}
+
+export async function resolveDuplicateGroupWithRollbackProbeForTest(
+  adminUserId: string,
+  input: Extract<DuplicateGroupResolutionInput, { resolution: "merge" }>,
+) {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("The duplicate-resolution rollback probe is available only in test mode.");
+  }
+
+  return await resolveDuplicateGroupInternal(adminUserId, input, async () => {
+    throw new Error("Injected duplicate-resolution rollback probe");
+  });
 }

@@ -20,8 +20,13 @@ import {
 
 export { PaperClassificationServiceError } from "./classification-errors";
 
-const CLASSIFICATION_BATCH_CONCURRENCY = 8;
+export const CLASSIFICATION_BATCH_CONCURRENCY = 8;
 export const CLASSIFICATION_VERSION = "rule-based-v2.1.4";
+
+interface ClassificationBatchTestOptions {
+  beforePaper?: (paperId: string) => Promise<void>;
+  afterPaper?: (paperId: string) => Promise<void>;
+}
 
 type ClassifiablePaperStatus = "pending" | "needs_review" | "published";
 
@@ -367,7 +372,10 @@ export async function classifyPaperById(
   return await classifyPaperByIdWithProfiler(paperId, undefined, options);
 }
 
-export async function classifyPendingPapers(input: ClassifyPendingPapersInput = {}): Promise<ClassifyPendingPapersResult> {
+async function classifyPendingPapersInternal(
+  input: ClassifyPendingPapersInput = {},
+  testOptions?: ClassificationBatchTestOptions,
+): Promise<ClassifyPendingPapersResult> {
   const profiler = env.CLASSIFICATION_PROFILING ? new BackendProfiler() : undefined;
   let totalFound = 0;
   let totalClassified = 0;
@@ -404,6 +412,7 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
       CLASSIFICATION_BATCH_CONCURRENCY,
       async (paperId) => {
         try {
+          await testOptions?.beforePaper?.(paperId);
           return {
             outcome: "success",
             paperId,
@@ -415,6 +424,8 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
             paperId,
             error,
           } as const;
+        } finally {
+          await testOptions?.afterPaper?.(paperId);
         }
       },
     );
@@ -481,4 +492,21 @@ export async function classifyPendingPapers(input: ClassifyPendingPapersInput = 
       );
     }
   }
+}
+
+export async function classifyPendingPapers(
+  input: ClassifyPendingPapersInput = {},
+): Promise<ClassifyPendingPapersResult> {
+  return await classifyPendingPapersInternal(input);
+}
+
+export async function classifyPendingPapersForTest(
+  input: ClassifyPendingPapersInput,
+  options: ClassificationBatchTestOptions,
+): Promise<ClassifyPendingPapersResult> {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("The classification batch test entry point is available only in test mode.");
+  }
+
+  return await classifyPendingPapersInternal(input, options);
 }
