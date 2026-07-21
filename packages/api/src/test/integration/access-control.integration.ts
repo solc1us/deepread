@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "
 
 import { loadTestDatabaseEnvironment } from "@deepread/db/test-database-environment";
 import { createTestDatabaseClient } from "@deepread/db/test-database-client";
-import type { TRPCError } from "@trpc/server";
 
 import type { AppRouter } from "../../routers";
+import { expectTrpcError } from "./test-assertions";
 import { createGuestContext, createUserContext } from "./test-context";
 import {
   cleanupAccessControlFixtures,
@@ -28,26 +28,13 @@ let userB: Caller;
 let admin: Caller;
 let appPrisma: typeof import("@deepread/db").default;
 
-async function expectTrpcError(promise: Promise<unknown>, code: TRPCError["code"], message?: string) {
-  try {
-    await promise;
-    throw new Error(`Expected ${code} tRPC error.`);
-  } catch (error) {
-    const trpcError = error as { code?: string; message?: string };
-    expect(trpcError.code).toBe(code);
-    if (message) {
-      expect(trpcError.message).toBe(message);
-    }
-  }
-}
-
 beforeAll(async () => {
   const runId = createTestRunId();
 
   try {
     fixtures = await createAccessControlFixtures(fixturePrisma, runId);
   } catch (error) {
-    await cleanupCurrentTestRun(fixturePrisma, runId);
+    await cleanupCurrentTestRun(fixturePrisma, runId).catch(() => undefined);
     const errorType = error instanceof Error ? error.name : typeof error;
     throw new Error(
       `Unable to create isolated fixtures (${errorType}). Apply migrations with bun run test:integration:migrate and verify the test database configuration.`,
