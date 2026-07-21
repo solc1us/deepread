@@ -3,7 +3,22 @@ import { initTRPC, TRPCError } from "@trpc/server";
 
 import type { Context } from "./context";
 
-export const t = initTRPC.context<Context>().create();
+export const t = initTRPC.context<Context>().create({
+  errorFormatter({ shape, error, ctx }) {
+    const isUnexpectedInternalError =
+      error.code === "INTERNAL_SERVER_ERROR" && error.cause instanceof Error;
+
+    return {
+      ...shape,
+      message: isUnexpectedInternalError ? "Internal server error." : shape.message,
+      data: {
+        ...shape.data,
+        stack: undefined,
+        requestId: ctx?.requestId ?? null,
+      },
+    };
+  },
+});
 
 export const router = t.router;
 

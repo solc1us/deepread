@@ -9,24 +9,34 @@ async function main() {
   loadTestDatabaseEnvironment();
 
   const rootDirectory = path.resolve(import.meta.dir, "../../../../..");
-  const processHandle = Bun.spawn(
-    [
-      process.execPath,
-      "test",
-      "--preload",
-      "./packages/api/src/test/integration/preload.ts",
-      "./packages/api/src/test/integration/pipeline-remediation.integration.ts",
-    ],
-    {
-      cwd: rootDirectory,
-      env: process.env,
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    },
-  );
+  const testFiles = [
+    "./packages/api/src/test/integration/pipeline-remediation.integration.ts",
+    "./apps/server/src/server-runtime.integration.ts",
+  ];
 
-  process.exit(await processHandle.exited);
+  for (const testFile of testFiles) {
+    const processHandle = Bun.spawn(
+      [
+        process.execPath,
+        "test",
+        "--preload",
+        "./packages/api/src/test/integration/preload.ts",
+        testFile,
+      ],
+      {
+        cwd: rootDirectory,
+        env: process.env,
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      },
+    );
+
+    const exitCode = await processHandle.exited;
+    if (exitCode !== 0) {
+      process.exit(exitCode);
+    }
+  }
 }
 
 main().catch((error: unknown) => {

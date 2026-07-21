@@ -6,6 +6,7 @@ export function createGuestContext(): Context {
   return {
     auth: null,
     session: null,
+    requestId: "integration-guest-request",
   };
 }
 
@@ -19,6 +20,7 @@ export function createUserContext(user: {
 
   return {
     auth: null,
+    requestId: `integration-${user.id}`,
     session: {
       session: {
         id: `session-${user.id}`,

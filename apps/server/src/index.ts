@@ -1,45 +1,64 @@
-import { createContext } from "@deepread/api/context";
-import { appRouter } from "@deepread/api/routers/index";
-import { auth } from "@deepread/auth";
+import prisma from "@deepread/db";
 import { env } from "@deepread/env/server";
-import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { toNodeHandler } from "better-auth/node";
-import cors from "cors";
-import express from "express";
 
-const app = express();
+import app from "./app";
 
-app.use(
-  cors({
-    origin: env.CORS_ORIGIN,
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  }),
-);
-
-app.all("/api/auth{/*path}", toNodeHandler(auth));
-
-app.use(
-  "/trpc",
-  createExpressMiddleware({
-    router: appRouter,
-    createContext,
-  }),
-);
-
-app.use(express.json());
-
-app.get("/", (_req, res) => {
-  res.status(200).send("OK");
-});
-
-app.get("/health", (_req, res) => {
-  res.status(200).json({
-    status: "ok",
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+const FORCED_DISCONNECT_TIMEOUT_MS = 2_000;
+const server = app.listen(env.PORT, () => {
+  console.info("[Server] Listening", {
+    port: env.PORT,
   });
 });
 
-app.listen(3000, () => {
-  console.log("Server is running on http://localhost:3000");
+let shuttingDown = false;
+
+async function shutdown(signal: "SIGINT" | "SIGTERM") {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+  console.info("[Server] Shutdown started", { signal });
+
+  const forceCloseConnections = setTimeout(() => {
+    console.error("[Server] Shutdown timed out", {
+      timeoutMs: SHUTDOWN_TIMEOUT_MS,
+    });
+    server.closeAllConnections?.();
+  }, SHUTDOWN_TIMEOUT_MS);
+  forceCloseConnections.unref?.();
+  const forcedExit = setTimeout(() => {
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS + FORCED_DISCONNECT_TIMEOUT_MS);
+  forcedExit.unref?.();
+
+  server.close(async (error) => {
+    try {
+      await prisma.$disconnect();
+    } catch (disconnectError) {
+      console.error("[Server] Database disconnect failed", {
+        errorType: disconnectError instanceof Error ? disconnectError.name : typeof disconnectError,
+      });
+      process.exitCode = 1;
+    } finally {
+      clearTimeout(forceCloseConnections);
+      clearTimeout(forcedExit);
+    }
+
+    if (error) {
+      console.error("[Server] HTTP shutdown failed", {
+        errorType: error.name,
+      });
+      process.exitCode = 1;
+    } else {
+      console.info("[Server] Shutdown complete", { signal });
+    }
+  });
+}
+
+process.once("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+process.once("SIGTERM", () => {
+  void shutdown("SIGTERM");
 });
