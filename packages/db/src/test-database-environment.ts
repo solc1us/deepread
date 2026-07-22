@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import dotenv from "dotenv";
 
 const TEST_DATABASE_CONFIRMATION = "deepread-test-only";
-const TEST_ENV_PATH = path.resolve(import.meta.dir, "../../..", ".env.test.local");
-const DEVELOPMENT_ENV_PATH = path.resolve(import.meta.dir, "../../..", "apps/server/.env");
+const MODULE_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
+const TEST_ENV_PATH = path.resolve(MODULE_DIRECTORY, "../../..", ".env.test.local");
+const DEVELOPMENT_ENV_PATH = path.resolve(MODULE_DIRECTORY, "../../..", "apps/server/.env");
 
 export interface TestDatabaseEnvironment {
   databaseUrl: string;

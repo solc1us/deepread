@@ -32,6 +32,8 @@
     "check-types": "turbo run check-types",
     "test": "bun test --preload ./apps/web/src/test/setup.ts",
     "test:web": "bun run --cwd apps/web test",
+    "test:e2e": "bun tests/e2e/run-e2e.ts",
+    "test:e2e:headed": "bun tests/e2e/run-e2e.ts --headed",
     "test:integration": "bun run test:integration:access && bun run test:integration:reading && bun run test:integration:pipeline",
     "test:integration:access": "bun run packages/api/src/test/integration/run-access-integration.ts",
     "test:integration:reading": "bun run packages/api/src/test/integration/run-reading-integration.ts",
@@ -55,6 +57,7 @@
   },
   "devDependencies": {
     "@deepread/config": "workspace:*",
+    "@playwright/test": "^1.61.1",
     "@types/bun": "catalog:",
     "supabase": "^2.109.1",
     "tsx": "^4.22.4",
