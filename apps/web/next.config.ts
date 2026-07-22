@@ -1,5 +1,7 @@
-import "@deepread/env/web";
+import { warnAboutProductionWebOrigin } from "@deepread/env/web";
 import type { NextConfig } from "next";
+
+warnAboutProductionWebOrigin();
 
 const nextConfig: NextConfig = {
   typedRoutes: true,
