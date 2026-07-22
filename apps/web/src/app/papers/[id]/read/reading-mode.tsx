@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@deepread/ui/components/button";
+import { Button, buttonVariants } from "@deepread/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@deepread/ui/components/card";
 import { Skeleton } from "@deepread/ui/components/skeleton";
 import { cn } from "@deepread/ui/lib/utils";
@@ -166,15 +166,13 @@ export default function ReadingMode({ paperId }: ReadingModeProps) {
   if (paper.isError || !paper.data || progress.isError) {
     return (
       <main className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-8">
-        <Button
-          className="w-fit rounded-md"
-          nativeButton={false}
-          variant="outline"
-          render={<Link href={`/papers/${paperId}`} />}
+        <Link
+          className={buttonVariants({ className: "w-fit rounded-md", variant: "outline" })}
+          href={`/papers/${paperId}`}
         >
           <ArrowLeft data-icon="inline-start" />
           Back to paper detail
-        </Button>
+        </Link>
         <Card className="rounded-lg border-border/80 shadow-sm">
           <CardContent className="flex items-start gap-3 py-4">
             <AlertCircle className="mt-0.5 text-destructive" />
@@ -199,15 +197,13 @@ export default function ReadingMode({ paperId }: ReadingModeProps) {
   return (
     <main className="mx-auto grid w-full max-w-4xl gap-5 px-4 py-8 md:py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button
-          className="rounded-md"
-          nativeButton={false}
-          variant="outline"
-          render={<Link href={`/papers/${paperId}`} />}
+        <Link
+          className={buttonVariants({ className: "rounded-md", variant: "outline" })}
+          href={`/papers/${paperId}`}
         >
           <ArrowLeft data-icon="inline-start" />
           Back to paper detail
-        </Button>
+        </Link>
         <span className="text-sm text-muted-foreground">Manual progress only</span>
       </div>
 
@@ -240,24 +236,25 @@ export default function ReadingMode({ paperId }: ReadingModeProps) {
             </div>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2 border-t pt-5">
-            <Button
-              className="rounded-md"
-              nativeButton={false}
-              render={<a href={paper.data.sourceUrl} rel="noreferrer" target="_blank" />}
+            <a
+              className={buttonVariants({ className: "rounded-md" })}
+              href={paper.data.sourceUrl}
+              rel="noreferrer"
+              target="_blank"
             >
               <ExternalLink data-icon="inline-start" />
               Open Source
-            </Button>
+            </a>
             {paper.data.pdfUrl ? (
-              <Button
-                className="rounded-md"
-                nativeButton={false}
-                variant="outline"
-                render={<a href={paper.data.pdfUrl} rel="noreferrer" target="_blank" />}
+              <a
+                className={buttonVariants({ className: "rounded-md", variant: "outline" })}
+                href={paper.data.pdfUrl}
+                rel="noreferrer"
+                target="_blank"
               >
                 <FileText data-icon="inline-start" />
                 Open PDF
-              </Button>
+              </a>
             ) : null}
           </CardContent>
         </Card>

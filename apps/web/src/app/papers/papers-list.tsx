@@ -1,7 +1,7 @@
 "use client";
 
 import { MAX_PAPER_SEARCH_LENGTH } from "@deepread/api/paper-search-limits";
-import { Button } from "@deepread/ui/components/button";
+import { Button, buttonVariants } from "@deepread/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@deepread/ui/components/card";
 import { Input } from "@deepread/ui/components/input";
 import { Skeleton } from "@deepread/ui/components/skeleton";
@@ -407,9 +407,12 @@ export default function PapersList({ initialFilters }: PapersListProps) {
                   >
                     {paper.isBookmarked ? <BookmarkCheck /> : <Bookmark />}
                   </Button>
-                  <Button className="rounded-md" nativeButton={false} render={<Link href={`/papers/${paper.id}`} />}>
+                  <Link
+                    className={buttonVariants({ className: "rounded-md" })}
+                    href={`/papers/${paper.id}`}
+                  >
                     View details
-                  </Button>
+                  </Link>
                 </div>
               </CardFooter>
             </Card>

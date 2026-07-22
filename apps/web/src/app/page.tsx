@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@deepread/ui/components/button";
+import { buttonVariants } from "@deepread/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@deepread/ui/components/card";
 import { BookOpen, Library, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
@@ -48,9 +48,9 @@ export default function Home() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button className="rounded-md" nativeButton={false} render={<Link href="/papers" />}>
+            <Link className={buttonVariants({ className: "rounded-md" })} href="/papers">
               Browse papers
-            </Button>
+            </Link>
           </div>
         </div>
 

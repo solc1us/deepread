@@ -1,4 +1,4 @@
-import { Button } from "@deepread/ui/components/button";
+import { Button, buttonVariants } from "@deepread/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,9 +30,9 @@ export default function UserMenu({ session, isPending }: UserMenuProps) {
 
   if (!session) {
     return (
-      <Button nativeButton={false} variant="outline" render={<Link href="/login" />}>
+      <Link className={buttonVariants({ variant: "outline" })} href="/login">
         Sign In
-      </Button>
+      </Link>
     );
   }
 

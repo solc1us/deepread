@@ -42,6 +42,15 @@ function configurePaperQueries() {
 }
 
 describe("paper library filters", () => {
+  test("renders View details as one semantic link with the paper route", async () => {
+    configurePaperQueries();
+    renderWithProviders(<PapersList initialFilters={{}} />);
+
+    const viewDetails = await screen.findByRole("link", { name: "View details" });
+    expect(viewDetails.getAttribute("href")).toBe("/papers/paper-1");
+    expect(viewDetails.querySelector("a, button")).toBeNull();
+  });
+
   test("applies combined filters and preserves them through pagination", async () => {
     configurePaperQueries();
     const { user } = renderWithProviders(

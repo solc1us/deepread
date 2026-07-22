@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@deepread/ui/components/button";
+import { buttonVariants } from "@deepread/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@deepread/ui/components/card";
 import { Skeleton } from "@deepread/ui/components/skeleton";
 import { cn } from "@deepread/ui/lib/utils";
@@ -63,10 +63,13 @@ export default function PaperDetail({ id }: PaperDetailProps) {
   if (paper.isError || !paper.data) {
     return (
       <main className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-8">
-        <Button className="w-fit rounded-md" nativeButton={false} variant="outline" render={<Link href="/papers" />}>
+        <Link
+          className={buttonVariants({ className: "w-fit rounded-md", variant: "outline" })}
+          href="/papers"
+        >
           <ArrowLeft data-icon="inline-start" />
           Back to papers
-        </Button>
+        </Link>
         <Card className="rounded-lg border-border/80 shadow-sm">
           <CardContent className="flex items-start gap-3 py-4">
             <AlertCircle className="mt-0.5 text-destructive" />
@@ -86,10 +89,13 @@ export default function PaperDetail({ id }: PaperDetailProps) {
 
   return (
     <main className="mx-auto grid w-full max-w-4xl gap-5 px-4 py-8">
-      <Button className="w-fit rounded-md" nativeButton={false} variant="outline" render={<Link href="/papers" />}>
+      <Link
+        className={buttonVariants({ className: "w-fit rounded-md", variant: "outline" })}
+        href="/papers"
+      >
         <ArrowLeft data-icon="inline-start" />
         Back to papers
-      </Button>
+      </Link>
 
       <article className="grid gap-5">
         <Card className="rounded-xl border-border/80 shadow-sm">
@@ -205,24 +211,25 @@ export default function PaperDetail({ id }: PaperDetailProps) {
             ) : null}
 
             <div className="flex flex-wrap gap-2">
-              <Button
-                className="rounded-md"
-                nativeButton={false}
-                render={<a href={paper.data.sourceUrl} rel="noreferrer" target="_blank" />}
+              <a
+                className={buttonVariants({ className: "rounded-md" })}
+                href={paper.data.sourceUrl}
+                rel="noreferrer"
+                target="_blank"
               >
                 <ExternalLink data-icon="inline-start" />
                 Open source
-              </Button>
+              </a>
               {paper.data.pdfUrl ? (
-                <Button
-                  className="rounded-md"
-                  nativeButton={false}
-                  variant="outline"
-                  render={<a href={paper.data.pdfUrl} rel="noreferrer" target="_blank" />}
+                <a
+                  className={buttonVariants({ className: "rounded-md", variant: "outline" })}
+                  href={paper.data.pdfUrl}
+                  rel="noreferrer"
+                  target="_blank"
                 >
                   <FileText data-icon="inline-start" />
                   Open PDF
-                </Button>
+                </a>
               ) : null}
             </div>
           </CardContent>

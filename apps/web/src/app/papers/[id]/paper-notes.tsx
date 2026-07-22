@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@deepread/ui/components/button";
+import { Button, buttonVariants } from "@deepread/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@deepread/ui/components/card";
 import { Input } from "@deepread/ui/components/input";
 import { Skeleton } from "@deepread/ui/components/skeleton";
@@ -93,9 +93,12 @@ export default function PaperNotes({ paperId, isAuthenticated, isAuthPending }: 
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-3">
           <p className="text-sm text-muted-foreground">Sign in to keep private notes for this paper.</p>
-          <Button className="rounded-md" nativeButton={false} render={<Link href="/login" />} variant="outline">
+          <Link
+            className={buttonVariants({ className: "rounded-md", variant: "outline" })}
+            href="/login"
+          >
             Sign in
-          </Button>
+          </Link>
         </CardContent>
       </Card>
     );
