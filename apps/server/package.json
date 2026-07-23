@@ -6,7 +6,7 @@
     "node": "22.x"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && node src/scripts/check-vercel-runtime.mjs",
     "check-types": "tsc --noEmit --composite false",
     "classifier:export-v2": "bun run src/scripts/export-classifier-v2-evaluation.ts",
     "classifier:reclassify-legacy": "bun run src/scripts/reclassify-legacy-papers.ts",

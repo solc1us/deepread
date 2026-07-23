@@ -5,7 +5,6 @@ import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import prisma from "@deepread/db";
 import type { Express } from "express";
 
-import vercelApp from "../app";
 import app, { createApp } from "./app";
 
 setDefaultTimeout(15_000);
@@ -61,11 +60,9 @@ afterAll(async () => {
 });
 
 describe("server app runtime", () => {
-  test("the Vercel entrypoint exports the shared app without opening a listening port", async () => {
-    expect(vercelApp).toBe(app);
-
+  test("importing the shared app does not open a listening port", async () => {
     const child = Bun.spawn(
-      [process.execPath, "-e", "await import('./apps/server/app.ts')"],
+      [process.execPath, "-e", "await import('./apps/server/src/app.ts')"],
       {
         cwd: process.cwd(),
         env: process.env,
