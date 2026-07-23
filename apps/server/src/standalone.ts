@@ -1,7 +1,7 @@
 import prisma from "@deepread/db";
 import { env } from "@deepread/env/server";
 
-import app from "./app";
+import app from "./express-app";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 const FORCED_DISCONNECT_TIMEOUT_MS = 2_000;

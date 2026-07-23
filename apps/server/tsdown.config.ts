@@ -2,8 +2,8 @@ import { defineConfig } from "tsdown";
 
 export default defineConfig({
   entry: {
-    index: "./src/index.ts",
-    "vercel-app": "./src/app.ts",
+    standalone: "./src/standalone.ts",
+    "vercel-app": "./src/express-app.ts",
   },
   format: "esm",
   outDir: "./dist",

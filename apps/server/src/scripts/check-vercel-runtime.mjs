@@ -9,6 +9,9 @@ const SERVER_DIRECTORY = path.resolve(path.dirname(fileURLToPath(import.meta.url
 const DIST_DIRECTORY = path.join(SERVER_DIRECTORY, "dist");
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SMOKE_TIMEOUT_MS = 15_000;
+const STANDALONE_STARTUP_TIMEOUT_MS = 10_000;
+const SHUTDOWN_TIMEOUT_MS = 5_000;
+const SERVER_ENTRYPOINT_PATTERN = /^(app|index|server)\.(?:[cm]?[jt]s)$/;
 const FORBIDDEN_RUNTIME_IMPORTS = [
   /from\s+["']@deepread\//,
   /import\(\s*["']@deepread\//,
@@ -16,13 +19,40 @@ const FORBIDDEN_RUNTIME_IMPORTS = [
   /@deepread\/.*\/src\/.*\.ts/,
 ];
 
+async function assertSingleVercelEntrypoint() {
+  const entrypoints = [];
+
+  for (const directory of [SERVER_DIRECTORY, path.join(SERVER_DIRECTORY, "src")]) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && SERVER_ENTRYPOINT_PATTERN.test(entry.name)) {
+        entrypoints.push(
+          path
+            .relative(SERVER_DIRECTORY, path.join(directory, entry.name))
+            .replaceAll("\\", "/"),
+        );
+      }
+    }
+  }
+
+  if (entrypoints.length !== 1 || entrypoints[0] !== "app.ts") {
+    throw new Error(
+      `Expected app.ts to be the only Vercel-detectable server entrypoint; found: ${
+        entrypoints.join(", ") || "none"
+      }.`,
+    );
+  }
+}
+
 async function assertBundledRuntimeGraph() {
   const outputFiles = (await readdir(DIST_DIRECTORY))
     .filter((fileName) => fileName.endsWith(".mjs"))
     .sort();
 
-  if (!outputFiles.includes("vercel-app.mjs")) {
-    throw new Error("The Vercel app bundle was not generated.");
+  for (const requiredOutput of ["standalone.mjs", "vercel-app.mjs"]) {
+    if (!outputFiles.includes(requiredOutput)) {
+      throw new Error(`The ${requiredOutput} bundle was not generated.`);
+    }
   }
 
   for (const fileName of outputFiles) {
@@ -68,6 +98,7 @@ async function runChild() {
 }
 
 async function runParent() {
+  await assertSingleVercelEntrypoint();
   await assertBundledRuntimeGraph();
 
   const child = createServerSmokeProcess();
@@ -98,23 +129,116 @@ async function runParent() {
   }
 
   process.stdout.write(Buffer.concat(stdout).toString("utf8"));
+  await runStandaloneProbe();
+  console.log("[Vercel Runtime] Only apps/server/app.ts is auto-detectable.");
   console.log("[Vercel Runtime] Bundle contains no raw @deepread TypeScript imports.");
 }
 
 function createServerSmokeProcess() {
   return spawn(process.execPath, [SCRIPT_PATH, "--child"], {
     cwd: path.resolve(SERVER_DIRECTORY, "../.."),
-    env: {
-      ...process.env,
-      DATABASE_URL:
-        "postgresql://runtime_smoke:runtime_smoke@db.example.invalid:5432/deepread_runtime_smoke",
-      BETTER_AUTH_SECRET: "runtime-smoke-secret-at-least-32-characters",
-      BETTER_AUTH_URL: "https://api.example.invalid",
-      CORS_ORIGIN: "https://web.example.invalid",
-      NODE_ENV: "production",
-    },
+    env: createRuntimeEnvironment(),
     stdio: ["ignore", "pipe", "pipe"],
   });
+}
+
+function createRuntimeEnvironment(overrides = {}) {
+  return {
+    ...process.env,
+    DATABASE_URL:
+      "postgresql://runtime_smoke:runtime_smoke@db.example.invalid:5432/deepread_runtime_smoke",
+    BETTER_AUTH_SECRET: "runtime-smoke-secret-at-least-32-characters",
+    BETTER_AUTH_URL: "https://api.example.invalid",
+    CORS_ORIGIN: "https://web.example.invalid",
+    NODE_ENV: "production",
+    ...overrides,
+  };
+}
+
+async function runStandaloneProbe() {
+  const port = await getAvailablePort();
+  const child = spawn(
+    process.execPath,
+    [path.join(DIST_DIRECTORY, "standalone.mjs")],
+    {
+      cwd: SERVER_DIRECTORY,
+      env: createRuntimeEnvironment({ PORT: String(port) }),
+      stdio: "ignore",
+    },
+  );
+
+  try {
+    await waitForHealth(port, child);
+    console.log("[Vercel Runtime] Standalone startup probe passed.");
+  } finally {
+    await stopChild(child);
+  }
+}
+
+async function getAvailablePort() {
+  const server = createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("Could not reserve a port for the standalone smoke check.");
+  }
+
+  const { port } = address;
+  await new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+  return port;
+}
+
+async function waitForHealth(port, child) {
+  const deadline = Date.now() + STANDALONE_STARTUP_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error("The standalone server exited before becoming healthy.");
+    }
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/health`);
+      if (response.status === 200) {
+        return;
+      }
+    } catch {
+      // The listener may not be ready yet.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error(
+    `Standalone startup exceeded ${STANDALONE_STARTUP_TIMEOUT_MS}ms.`,
+  );
+}
+
+async function stopChild(child) {
+  if (child.exitCode !== null) {
+    return;
+  }
+
+  const exit = once(child, "exit");
+  child.kill("SIGTERM");
+  const stopped = await Promise.race([
+    exit.then(() => true),
+    new Promise((resolve) =>
+      setTimeout(() => resolve(false), SHUTDOWN_TIMEOUT_MS),
+    ),
+  ]);
+
+  if (!stopped && child.exitCode === null) {
+    child.kill("SIGKILL");
+    await once(child, "exit");
+  }
 }
 
 if (process.argv.includes("--child")) {

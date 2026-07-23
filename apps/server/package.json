@@ -1,7 +1,7 @@
 {
   "name": "server",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "src/standalone.ts",
   "engines": {
     "node": "22.x"
   },
@@ -10,14 +10,14 @@
     "check-types": "tsc --noEmit --composite false",
     "classifier:export-v2": "bun run src/scripts/export-classifier-v2-evaluation.ts",
     "classifier:reclassify-legacy": "bun run src/scripts/reclassify-legacy-papers.ts",
-    "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
-    "dev": "bun run --hot src/index.ts",
+    "compile": "bun build --compile --minify --sourcemap --bytecode ./src/standalone.ts --outfile server",
+    "dev": "bun run --hot src/standalone.ts",
     "dev:db-health": "bun run src/scripts/dev-db-health.ts",
     "dev:classify-pending": "bun run src/scripts/dev-classify-pending.ts",
     "dev:ingest-openalex": "bun run src/scripts/dev-ingest-openalex.ts",
     "dev:test-classifier": "bun run src/scripts/dev-test-classifier.ts",
     "dev:test-openalex": "bun run src/scripts/dev-test-openalex.ts",
-    "start": "bun run dist/index.mjs"
+    "start": "bun run dist/standalone.mjs"
   },
   "dependencies": {
     "@deepread/api": "workspace:*",

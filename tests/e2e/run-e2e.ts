@@ -182,7 +182,7 @@ process.once("SIGTERM", () => handleSignal("SIGTERM"));
 let exitCode = 1;
 try {
 	const [{ default: app }, databaseModule] = await Promise.all([
-		import("../../apps/server/src/app.ts"),
+		import("../../apps/server/src/express-app.ts"),
 		import("../../packages/db/src/index.ts"),
 	]);
 	prisma = databaseModule.default;
