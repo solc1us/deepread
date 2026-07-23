@@ -26,7 +26,7 @@ export const test = base.extend<E2EFixtures>({
   },
   page: async ({ page }, use) => {
     const environment = getE2EEnvironment();
-    const allowedOrigins = new Set([environment.webOrigin, environment.serverOrigin]);
+    const allowedOrigins = new Set([environment.webOrigin]);
     const blockedUrls: string[] = [];
 
     await page.route("**/*", async (route) => {

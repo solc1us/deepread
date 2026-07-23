@@ -183,7 +183,7 @@ function createRuntimeEnvironment(overrides = {}) {
     DATABASE_URL:
       "postgresql://runtime_smoke:runtime_smoke@db.example.invalid:5432/deepread_runtime_smoke",
     BETTER_AUTH_SECRET: "runtime-smoke-secret-at-least-32-characters",
-    BETTER_AUTH_URL: "https://api.example.invalid",
+    BETTER_AUTH_URL: "https://web.example.invalid",
     CORS_ORIGIN: "https://web.example.invalid",
     NODE_ENV: "production",
     ...overrides,

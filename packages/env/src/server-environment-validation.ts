@@ -55,6 +55,11 @@ export function validateServerProductionEnvironment(input: {
 
   assertSecureProductionOrigin("BETTER_AUTH_URL", input.authUrl);
   assertSecureProductionOrigin("CORS_ORIGIN", input.corsOrigin);
+  if (input.authUrl !== input.corsOrigin) {
+    throw new Error(
+      "[Environment] BETTER_AUTH_URL and CORS_ORIGIN must use the same public web origin.",
+    );
+  }
   if (isLocalUrl(input.databaseUrl)) {
     throw new Error("[Environment] DATABASE_URL must not reference localhost in production.");
   }

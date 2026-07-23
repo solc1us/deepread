@@ -50,7 +50,11 @@ test("guest cannot open an unpublished paper", async ({ page, e2eState }) => {
 
 test("guest is redirected from authenticated and admin pages", async ({ page }) => {
   await page.goto("/profile");
-  await expect(page).toHaveURL(/\/login$/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/login\?next=%2Fprofile$/, {
+    timeout: 20_000,
+  });
   await page.goto("/admin");
-  await expect(page).toHaveURL(/\/login$/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/login\?next=%2Fadmin$/, {
+    timeout: 20_000,
+  });
 });

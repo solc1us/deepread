@@ -60,5 +60,5 @@ test("reader cannot access admin pages and can sign out", async ({ page, e2eStat
   await signOut(page);
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/profile");
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login\?next=%2Fprofile$/);
 });

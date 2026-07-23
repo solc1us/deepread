@@ -3,14 +3,25 @@
 import { authClient } from "@/lib/auth-client";
 
 import AppSidebar from "./app-sidebar";
+import { SessionCheckMessage } from "./auth-guard";
 import PublicNavbar from "./public-navbar";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { data: session, isPending } = authClient.useSession();
+  const { data: session, error, isPending, refetch } = authClient.useSession();
 
-  // Wait for Better Auth to resolve before choosing a public or authenticated shell.
   if (isPending) {
-    return <div className="min-h-svh">{children}</div>;
+    return <SessionCheckMessage />;
+  }
+
+  if (error) {
+    return (
+      <SessionCheckMessage
+        error
+        onRetry={() => {
+          void refetch();
+        }}
+      />
+    );
   }
 
   if (!session) {

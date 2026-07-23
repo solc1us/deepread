@@ -15,14 +15,15 @@ export function getE2EEnvironment() {
       NODE_ENV: "test",
       DATABASE_URL: database.databaseUrl,
       BETTER_AUTH_SECRET: TEST_AUTH_SECRET,
-      BETTER_AUTH_URL: SERVER_ORIGIN,
+      BETTER_AUTH_URL: WEB_ORIGIN,
       CORS_ORIGIN: WEB_ORIGIN,
       PORT: "3002",
       CLASSIFICATION_PROFILING: "false",
       OPENALEX_INGESTION_PROFILING: "false",
     },
     webEnvironment: {
-      NEXT_PUBLIC_SERVER_URL: SERVER_ORIGIN,
+      API_UPSTREAM_URL: SERVER_ORIGIN,
+      NEXT_PUBLIC_SERVER_URL: WEB_ORIGIN,
     },
   };
 }

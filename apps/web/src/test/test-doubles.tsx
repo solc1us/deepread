@@ -91,12 +91,40 @@ export const queryClient = new QueryClient({
 });
 
 export const routerPushCalls: string[] = [];
+export const routerReplaceCalls: string[] = [];
 export const toastCalls: Array<{ type: string; message: string }> = [];
+export const sessionRefetchCalls: number[] = [];
 
-let sessionState: {
-  data: { user?: { id: string } } | null;
+type FrontendSessionState = {
+  data: {
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      role: "user" | "admin";
+    };
+  } | null;
+  error: Error | null;
   isPending: boolean;
-} = { data: null, isPending: false };
+  refetch: () => Promise<void>;
+};
+
+let sessionState: FrontendSessionState = createSessionState();
+let currentPathname = "/profile";
+
+function createSessionState(
+  state: Partial<Omit<FrontendSessionState, "refetch">> = {},
+): FrontendSessionState {
+  return {
+    data: null,
+    error: null,
+    isPending: false,
+    ...state,
+    refetch: async () => {
+      sessionRefetchCalls.push(Date.now());
+    },
+  };
+}
 
 export function setFrontendOperationHandler(operation: string, handler: OperationHandler) {
   handlers.set(operation, handler);
@@ -106,18 +134,47 @@ export function getFrontendOperationCalls(operation: string) {
   return calls.get(operation) ?? [];
 }
 
-export function setFrontendSession(userId?: string) {
+export function setFrontendSession(
+  userId?: string,
+  role: "user" | "admin" = "user",
+) {
   sessionState = userId
-    ? { data: { user: { id: userId } }, isPending: false }
-    : { data: null, isPending: false };
+    ? createSessionState({
+        data: {
+          user: {
+            id: userId,
+            name: "Test Reader",
+            email: "reader@example.test",
+            role,
+          },
+        },
+      })
+    : createSessionState();
+}
+
+export function setFrontendSessionPending() {
+  sessionState = createSessionState({ isPending: true });
+}
+
+export function setFrontendSessionError() {
+  sessionState = createSessionState({
+    error: new Error("Session transport unavailable"),
+  });
+}
+
+export function setFrontendPathname(pathname: string) {
+  currentPathname = pathname;
 }
 
 export function resetFrontendTestDoubles() {
   handlers.clear();
   calls.clear();
   routerPushCalls.length = 0;
+  routerReplaceCalls.length = 0;
   toastCalls.length = 0;
-  sessionState = { data: null, isPending: false };
+  sessionRefetchCalls.length = 0;
+  sessionState = createSessionState();
+  currentPathname = "/profile";
   queryClient.clear();
 }
 
@@ -135,9 +192,10 @@ export const authClientModuleMock = {
 };
 
 export const nextNavigationModuleMock = {
+  usePathname: () => currentPathname,
   useRouter: () => ({
     push: (href: string) => routerPushCalls.push(href),
-    replace: () => undefined,
+    replace: (href: string) => routerReplaceCalls.push(href),
     refresh: () => undefined,
     back: () => undefined,
     forward: () => undefined,

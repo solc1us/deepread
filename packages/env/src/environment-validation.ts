@@ -38,6 +38,27 @@ export function validateProductionWebOrigin(input: {
   if (url.protocol === "https:" && !isLocalUrl(input.serverUrl)) return;
 
   throw new Error(
-    "[Environment] NEXT_PUBLIC_SERVER_URL must be an explicit HTTPS non-local API origin for production builds.",
+    "[Environment] NEXT_PUBLIC_SERVER_URL must be an explicit HTTPS non-local web origin for production builds.",
   );
+}
+
+export function validateProductionWebProxy(input: {
+  nodeEnv: string | undefined;
+  publicWebOrigin: string;
+  apiUpstreamUrl: string;
+}) {
+  if (input.nodeEnv !== "production") return;
+
+  const upstream = new URL(input.apiUpstreamUrl);
+  if (upstream.protocol !== "https:" || isLocalUrl(input.apiUpstreamUrl)) {
+    throw new Error(
+      "[Environment] API_UPSTREAM_URL must be an explicit HTTPS non-local API origin for production builds.",
+    );
+  }
+
+  if (input.publicWebOrigin === input.apiUpstreamUrl) {
+    throw new Error(
+      "[Environment] API_UPSTREAM_URL must differ from NEXT_PUBLIC_SERVER_URL to prevent a proxy loop.",
+    );
+  }
 }

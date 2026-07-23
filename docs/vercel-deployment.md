@@ -37,9 +37,10 @@ Use placeholders only in documentation. Every environment change requires a new 
 
 | Variable | Preview | Production |
 | --- | --- | --- |
-| `NEXT_PUBLIC_SERVER_URL` | Exact HTTPS URL of the paired preview API | Exact HTTPS production API origin |
+| `API_UPSTREAM_URL` | Exact HTTPS URL of the paired preview API | Exact HTTPS production API origin |
+| `NEXT_PUBLIC_SERVER_URL` | Exact HTTPS preview web origin | Exact HTTPS production web origin |
 
-No database URL, auth secret, or server environment module belongs in the web project.
+`API_UPSTREAM_URL` is server-only despite being configured on the web project. No database URL or auth secret belongs in the web project.
 
 ### API Project
 
@@ -47,13 +48,13 @@ No database URL, auth secret, or server environment module belongs in the web pr
 | --- | --- | --- |
 | `DATABASE_URL` | Pooled URL for the isolated preview database target | Pooled URL for the production database |
 | `BETTER_AUTH_SECRET` | Unique preview secret | Unique production secret |
-| `BETTER_AUTH_URL` | Exact paired preview API origin | Exact production API origin |
+| `BETTER_AUTH_URL` | Exact paired preview web origin | Exact production web origin |
 | `CORS_ORIGIN` | Exact paired preview web origin | Exact production web origin |
 | `NODE_ENV` | `production` | `production` |
 
 `OPENALEX_API_KEY` is optional. Profiling flags remain optional and default to `false`. Do not configure `DIRECT_URL` in Vercel: migrations use the guarded local owner workflow in [`production-database.md`](production-database.md).
 
-Credentialed tRPC and Better Auth requests go directly from the browser to the configured API origin. CORS accepts only the exact web origin. Do not use `*`, `*.vercel.app`, arbitrary origin reflection, or a broad API proxy.
+Credentialed tRPC and Better Auth requests use relative `/trpc/*` and `/api/auth/*` paths on the web origin. Next.js rewrites only those paths to `API_UPSTREAM_URL`. CORS and Better Auth trust only the exact web origin. Do not use `*`, `*.vercel.app`, or arbitrary origin reflection.
 
 ## Preview Pair
 
@@ -61,8 +62,8 @@ Use one deterministic preview pair for deployment rehearsal rather than enabling
 
 1. Create one preview deployment for each project to obtain or assign stable preview aliases.
 2. If URLs are not known before the first build, use explicit `example.invalid` HTTPS placeholders for that build only.
-3. Set API `BETTER_AUTH_URL` to the preview API URL and `CORS_ORIGIN` to the preview web URL.
-4. Set web `NEXT_PUBLIC_SERVER_URL` to the preview API URL.
+3. Set API `BETTER_AUTH_URL` and `CORS_ORIGIN` to the preview web URL.
+4. Set web `API_UPSTREAM_URL` to the preview API URL and `NEXT_PUBLIC_SERVER_URL` to the preview web URL.
 5. Redeploy the API, then redeploy the web project.
 6. Verify `/health`, `/ready`, authentication cookies, and one tRPC query.
 

@@ -7,6 +7,7 @@ const SERVER_ONLY_MARKERS = [
   "DATABASE_URL",
   "DIRECT_URL",
   "BETTER_AUTH_SECRET",
+  "API_UPSTREAM_URL",
 ] as const;
 
 describe("browser environment boundary", () => {
@@ -28,5 +29,20 @@ describe("browser environment boundary", () => {
     }
 
     expect(violations).toEqual([]);
+  });
+
+  test("browser auth and tRPC clients use same-origin paths", async () => {
+    const repositoryRoot = path.resolve(import.meta.dir, "../../..");
+    const authClient = await Bun.file(
+      path.join(repositoryRoot, "apps/web/src/lib/auth-client.ts"),
+    ).text();
+    const trpcClient = await Bun.file(
+      path.join(repositoryRoot, "apps/web/src/utils/trpc.ts"),
+    ).text();
+
+    expect(authClient).not.toContain("baseURL:");
+    expect(authClient).not.toContain("NEXT_PUBLIC_SERVER_URL");
+    expect(trpcClient).toContain('url: "/trpc"');
+    expect(trpcClient).not.toContain("NEXT_PUBLIC_SERVER_URL");
   });
 });

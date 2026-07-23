@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   httpOriginSchema,
+  validateProductionWebProxy,
   validateProductionWebOrigin,
 } from "./environment-validation";
 import {
@@ -30,7 +31,7 @@ describe("environment validation", () => {
         nodeEnv: "production",
         databaseUrl: "postgresql://user:pass@db.example.com/app",
         authSecret: "replace-with-at-least-32-characters",
-        authUrl: "https://api.example.com",
+        authUrl: "https://www.example.com",
         corsOrigin: "https://www.example.com",
       }),
     ).toThrow("known placeholder");
@@ -40,10 +41,20 @@ describe("environment validation", () => {
         nodeEnv: "production",
         databaseUrl: "postgresql://user:pass@localhost/app",
         authSecret: "a-secure-random-production-secret-value",
-        authUrl: "https://api.example.com",
+        authUrl: "https://www.example.com",
         corsOrigin: "https://www.example.com",
       }),
     ).toThrow("must not reference localhost");
+
+    expect(() =>
+      validateServerProductionEnvironment({
+        nodeEnv: "production",
+        databaseUrl: "postgresql://user:pass@db.example.com/app",
+        authSecret: "a-secure-random-production-secret-value",
+        authUrl: "https://api.example.com",
+        corsOrigin: "https://www.example.com",
+      }),
+    ).toThrow("same public web origin");
   });
 
   test("allows local development and rejects local production web builds", () => {
@@ -62,12 +73,38 @@ describe("environment validation", () => {
         nodeEnv: "production",
         serverUrl: "http://localhost:3000",
       }),
-    ).toThrow("explicit HTTPS non-local API origin");
+    ).toThrow("explicit HTTPS non-local web origin");
 
     expect(() =>
       validateProductionWebOrigin({
         nodeEnv: "production",
         serverUrl: "https://api.example.invalid",
+      }),
+    ).not.toThrow();
+  });
+
+  test("requires a distinct secure API upstream for production web proxies", () => {
+    expect(() =>
+      validateProductionWebProxy({
+        nodeEnv: "production",
+        publicWebOrigin: "https://web.example.com",
+        apiUpstreamUrl: "http://localhost:3000",
+      }),
+    ).toThrow("explicit HTTPS non-local API origin");
+
+    expect(() =>
+      validateProductionWebProxy({
+        nodeEnv: "production",
+        publicWebOrigin: "https://web.example.com",
+        apiUpstreamUrl: "https://web.example.com",
+      }),
+    ).toThrow("prevent a proxy loop");
+
+    expect(() =>
+      validateProductionWebProxy({
+        nodeEnv: "production",
+        publicWebOrigin: "https://web.example.com",
+        apiUpstreamUrl: "https://api.example.com",
       }),
     ).not.toThrow();
   });

@@ -21,9 +21,10 @@ jobs:
       DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/deepread_ci
       DIRECT_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/deepread_ci
       BETTER_AUTH_SECRET: phase11-validation-secret-with-at-least-32-characters
-      BETTER_AUTH_URL: https://api.example.invalid
+      BETTER_AUTH_URL: https://web.example.invalid
       CORS_ORIGIN: https://web.example.invalid
-      NEXT_PUBLIC_SERVER_URL: https://api.example.invalid
+      API_UPSTREAM_URL: https://api.example.invalid
+      NEXT_PUBLIC_SERVER_URL: https://web.example.invalid
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

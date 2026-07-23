@@ -1,23 +1,7 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+"use client";
 
-import { authClient } from "@/lib/auth-client";
+import AuthGuard from "@/components/auth-guard";
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await authClient.getSession({
-    fetchOptions: {
-      headers: await headers(),
-      throw: true,
-    },
-  });
-
-  if (!session?.user) {
-    redirect("/login");
-  }
-
-  if (session.user.role !== "admin") {
-    redirect("/papers");
-  }
-
-  return children;
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return <AuthGuard requireAdmin>{children}</AuthGuard>;
 }

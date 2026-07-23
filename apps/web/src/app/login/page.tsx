@@ -1,16 +1,25 @@
-"use client";
+import LoginPanel from "./login-panel";
 
-import { useState } from "react";
+type LoginPageProps = {
+  searchParams: Promise<{
+    next?: string | string[];
+  }>;
+};
 
-import SignInForm from "@/components/sign-in-form";
-import SignUpForm from "@/components/sign-up-form";
+function getSafeReturnPath(value: string | string[] | undefined) {
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.startsWith("/login")
+  ) {
+    return undefined;
+  }
 
-export default function LoginPage() {
-  const [showSignIn, setShowSignIn] = useState(false);
+  return value;
+}
 
-  return showSignIn ? (
-    <SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
-  ) : (
-    <SignUpForm onSwitchToSignIn={() => setShowSignIn(true)} />
-  );
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const { next } = await searchParams;
+  return <LoginPanel returnPath={getSafeReturnPath(next)} />;
 }

@@ -57,7 +57,35 @@ async function waitForUrl(url: string, childProcess?: ManagedProcess) {
 		await Bun.sleep(250);
 	}
 
-	throw new Error(`Timed out waiting for local E2E service at ${url}.`);
+  throw new Error(`Timed out waiting for local E2E service at ${url}.`);
+}
+
+async function warmWebRoutes(
+  webOrigin: string,
+  state: Awaited<ReturnType<typeof createE2EFixtures>>,
+) {
+  const routes = [
+    "/login",
+    "/papers",
+    `/papers/${state.primaryPaper.id}`,
+    `/papers/${state.primaryPaper.id}/read`,
+    "/profile",
+    "/statistics",
+    "/admin",
+    "/admin/papers",
+    `/admin/papers/${state.needsReviewPaper.id}`,
+    "/admin/data-quality",
+    "/admin/data-quality/details?issue=duplicate-title",
+  ];
+
+  for (const route of routes) {
+    const response = await fetch(`${webOrigin}${route}`, {
+      signal: AbortSignal.timeout(STARTUP_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      throw new Error(`Local E2E route failed to warm: ${route}.`);
+    }
+  }
 }
 
 async function stopProcessTree(childProcess: ManagedProcess) {
@@ -222,12 +250,18 @@ try {
 	console.info("[E2E] Web started.");
 
 	fixturesStarted = true;
-	await withTimeout(
+	const e2eState = await withTimeout(
 		createE2EFixtures(),
 		FIXTURE_TIMEOUT_MS,
 		"Timed out seeding isolated E2E fixtures.",
 	);
 	console.info("[E2E] Fixtures seeded.");
+	await withTimeout(
+		warmWebRoutes(environment.webOrigin, e2eState),
+		STARTUP_TIMEOUT_MS,
+		"Timed out warming local E2E routes.",
+	);
+	console.info("[E2E] Routes warmed.");
 
 	console.info("[E2E] Playwright started.");
 	playwright = Bun.spawn(
