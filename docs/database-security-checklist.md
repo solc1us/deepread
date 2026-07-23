@@ -28,3 +28,18 @@ The integration commands are intentionally excluded from ordinary `bun test`, `b
 Data API enablement cannot be inferred reliably from a Prisma database connection. DeepRead currently uses Prisma on the backend and has no established client-side Supabase Data API requirement, so disable the Data API unless a concrete client-side use case is approved.
 
 The audit command does not change roles, grants, RLS settings, policies, or Supabase dashboard configuration.
+
+## Production Supabase Preparation
+
+Complete these checks manually on the separate production project before deployment:
+
+- Confirm whether the Data API is enabled and which schemas it exposes.
+- Confirm the browser uses only the Express/tRPC API and has no Supabase URL or key.
+- Review `anon` and `authenticated` SQL grants on application tables.
+- Inventory RLS enablement, forced status, and policies; do not assume RLS replaces tRPC ownership checks.
+- Verify the Prisma application role and service role have only the privileges they require.
+- Confirm backup/recovery availability before applying migrations.
+- Use pooled connectivity for application traffic and a direct connection for migrations.
+- Rotate database credentials and application secrets before production launch.
+
+DeepRead is backend-only for database access. Its primary authorization layer remains the tRPC admin guard and database-backed session ownership checks. Use the existing guarded `audit:database-security` command only with an isolated test database; production review remains a manual Supabase dashboard and SQL-catalog exercise.

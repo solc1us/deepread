@@ -93,10 +93,17 @@ deepread/
 - `bun run dev:web`: Start only the web application
 - `bun run dev:server`: Start only the server
 - `bun run check-types`: Check TypeScript types across all apps
-- `bun run db:push`: Push schema changes to database
 - `bun run db:generate`: Generate database client/types
-- `bun run db:migrate`: Run database migrations
+- `bun run db:validate`: Validate the Prisma schema
+- `bun run db:migrate:status`: Inspect migration status for an explicitly identified target
+- `bun run db:migrate:dev`: Create/apply development migrations
+- `bun run db:migrate:deploy`: Apply checked-in migrations to a confirmed production target
+- `bun run db:smoke`: Run a lightweight database connectivity check
 - `bun run db:studio`: Open database studio UI
+
+`db:push` remains available only for disposable local development. Never use `prisma db push`
+or `prisma migrate reset` against production. See
+[`docs/production-database.md`](docs/production-database.md) for the guarded workflow.
 
 ## OpenAlex Ingestion
 
