@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  getProductionWebOriginWarning,
   httpOriginSchema,
+  validateProductionWebOrigin,
 } from "./environment-validation";
 import {
   postgresUrlSchema,
@@ -46,7 +46,7 @@ describe("environment validation", () => {
     ).toThrow("must not reference localhost");
   });
 
-  test("allows local development and warns about local production web builds", () => {
+  test("allows local development and rejects local production web builds", () => {
     expect(() =>
       validateServerProductionEnvironment({
         nodeEnv: "development",
@@ -57,11 +57,18 @@ describe("environment validation", () => {
       }),
     ).not.toThrow();
 
-    expect(
-      getProductionWebOriginWarning({
+    expect(() =>
+      validateProductionWebOrigin({
         nodeEnv: "production",
         serverUrl: "http://localhost:3000",
       }),
-    ).toContain("NEXT_PUBLIC_SERVER_URL");
+    ).toThrow("explicit HTTPS non-local API origin");
+
+    expect(() =>
+      validateProductionWebOrigin({
+        nodeEnv: "production",
+        serverUrl: "https://api.example.invalid",
+      }),
+    ).not.toThrow();
   });
 });

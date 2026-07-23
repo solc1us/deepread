@@ -34,7 +34,7 @@ Copy `.env.test.example` to the ignored `.env.test.local`. Database-backed tests
 
 ## Preview And Production
 
-Configure the server-only variables on the API deployment and `NEXT_PUBLIC_SERVER_URL` on the web deployment. Use a pooled Supabase connection for `DATABASE_URL` and the direct connection for `DIRECT_URL`. Generate a unique production `BETTER_AUTH_SECRET`; placeholder secrets and local API, web, or database origins are rejected by server production validation. A local API value in a production web build emits a warning and must be replaced before deployment.
+Configure the server-only variables on the API deployment and `NEXT_PUBLIC_SERVER_URL` on the web deployment. Use a pooled Supabase connection for `DATABASE_URL`; keep `DIRECT_URL` outside Vercel for the separate manual migration workflow. Generate a unique production `BETTER_AUTH_SECRET`; placeholder secrets and local API, web, or database origins are rejected by production validation and builds.
 
 Development and production database targets must remain separate. The existing cloud Supabase project is development-only; the owner will create and configure a separate empty production project manually. See [`production-database.md`](production-database.md) for the guarded migration workflow. No Supabase or Vercel setting is changed by this contract.
 

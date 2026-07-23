@@ -28,14 +28,16 @@ function isLocalUrl(value: string) {
   return LOCAL_HOSTNAMES.has(new URL(value).hostname.toLowerCase());
 }
 
-export function getProductionWebOriginWarning(input: {
+export function validateProductionWebOrigin(input: {
   nodeEnv: string | undefined;
   serverUrl: string;
 }) {
-  if (input.nodeEnv !== "production") return null;
+  if (input.nodeEnv !== "production") return;
 
   const url = new URL(input.serverUrl);
-  if (url.protocol === "https:" && !isLocalUrl(input.serverUrl)) return null;
+  if (url.protocol === "https:" && !isLocalUrl(input.serverUrl)) return;
 
-  return "[Environment] NEXT_PUBLIC_SERVER_URL points to a local or non-HTTPS API during a production build. Configure an explicit HTTPS API origin before deployment.";
+  throw new Error(
+    "[Environment] NEXT_PUBLIC_SERVER_URL must be an explicit HTTPS non-local API origin for production builds.",
+  );
 }

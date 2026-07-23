@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import dotenv from "dotenv";
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
 
 dotenv.config({
 	path: "../../apps/server/.env",
@@ -14,6 +14,10 @@ export default defineConfig({
 		seed: "bun prisma/seed.ts",
 	},
 	datasource: {
-		url: env("DIRECT_URL"),
+		// Client generation and schema validation do not connect to PostgreSQL.
+		// Guarded migration commands always provide the real DIRECT_URL explicitly.
+		url:
+			process.env.DIRECT_URL?.trim() ||
+			"postgresql://schema_only:schema_only@127.0.0.1:5432/deepread_schema_only",
 	},
 });

@@ -20,10 +20,10 @@ jobs:
     env:
       DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/deepread_ci
       DIRECT_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/deepread_ci
-      BETTER_AUTH_SECRET: ci-only-placeholder-not-a-production-secret
-      BETTER_AUTH_URL: http://127.0.0.1:3000
-      CORS_ORIGIN: http://127.0.0.1:3001
-      NEXT_PUBLIC_SERVER_URL: http://127.0.0.1:3000
+      BETTER_AUTH_SECRET: phase11-validation-secret-with-at-least-32-characters
+      BETTER_AUTH_URL: https://api.example.invalid
+      CORS_ORIGIN: https://web.example.invalid
+      NEXT_PUBLIC_SERVER_URL: https://api.example.invalid
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

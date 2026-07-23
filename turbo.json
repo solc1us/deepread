@@ -9,6 +9,7 @@
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
         "CORS_ORIGIN",
+        "NODE_ENV",
         "NEXT_PUBLIC_SERVER_URL"
       ],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],

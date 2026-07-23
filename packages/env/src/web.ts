@@ -1,6 +1,6 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 
-import { getProductionWebOriginWarning, httpOriginSchema } from "./environment-validation";
+import { httpOriginSchema, validateProductionWebOrigin } from "./environment-validation";
 
 export const env = createEnv({
   client: {
@@ -12,10 +12,9 @@ export const env = createEnv({
   emptyStringAsUndefined: true,
 });
 
-export function warnAboutProductionWebOrigin() {
-  const warning = getProductionWebOriginWarning({
+export function validateProductionWebEnvironment() {
+  validateProductionWebOrigin({
     nodeEnv: process.env.NODE_ENV,
     serverUrl: env.NEXT_PUBLIC_SERVER_URL,
   });
-  if (warning) console.warn(warning);
 }
