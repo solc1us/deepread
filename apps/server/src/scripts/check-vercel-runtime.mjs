@@ -44,6 +44,40 @@ async function assertSingleVercelEntrypoint() {
   }
 }
 
+async function assertRootEntrypointContract() {
+  const source = await readFile(path.join(SERVER_DIRECTORY, "app.ts"), "utf8");
+  const requiredPatterns = [
+    {
+      pattern: /import\s+express\s+from\s+["']express["']/,
+      message: "The root app.ts must directly import express.",
+    },
+    {
+      pattern: /import\s+app\s+from\s+["']\.\/vercel-entry\.js["']/,
+      message: "The root app.ts must load the bundled app bridge.",
+    },
+    {
+      pattern: /export\s+default\s+app\b/,
+      message: "The root app.ts must default-export the bundled app.",
+    },
+  ];
+
+  for (const { pattern, message } of requiredPatterns) {
+    if (!pattern.test(source)) {
+      throw new Error(message);
+    }
+  }
+
+  if (/\bexpress\s*\(/.test(source)) {
+    throw new Error("The root app.ts must not create another Express app.");
+  }
+  if (/\.listen\s*\(/.test(source)) {
+    throw new Error("The root app.ts must not call listen.");
+  }
+  if (FORBIDDEN_RUNTIME_IMPORTS.some((pattern) => pattern.test(source))) {
+    throw new Error("The root app.ts contains a raw workspace source import.");
+  }
+}
+
 async function assertBundledRuntimeGraph() {
   const outputFiles = (await readdir(DIST_DIRECTORY))
     .filter((fileName) => fileName.endsWith(".mjs"))
@@ -99,6 +133,7 @@ async function runChild() {
 
 async function runParent() {
   await assertSingleVercelEntrypoint();
+  await assertRootEntrypointContract();
   await assertBundledRuntimeGraph();
 
   const child = createServerSmokeProcess();
