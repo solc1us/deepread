@@ -21,12 +21,11 @@ import {
   normalizeOpenAlexId,
   OPENALEX_PROVIDER,
 } from "./openalex-identifiers";
+import { buildOpenAlexPaperCreateData } from "./openalex-ingestion-payload";
 import { BackendProfiler, formatProfileSummary } from "./backend-profiler";
 
 const MAX_ERROR_EXAMPLES = 5;
 
-type JsonInputValue = null | string | number | boolean | JsonInputValue[] | JsonInputObject;
-type JsonInputObject = { [key: string]: JsonInputValue };
 type SaveResult =
   | { type: "saved" }
   | { type: "duplicate" }
@@ -115,38 +114,6 @@ function isValidNormalizedPaper(paper: NormalizedOpenAlexPaper) {
 
 function normalizeTitleKey(title: string) {
   return title.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-function toJsonValue(value: unknown): JsonInputValue {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(toJsonValue);
-  }
-
-  if (typeof value === "object" && value) {
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, item]) => item !== undefined)
-        .map(([key, item]) => [key, toJsonValue(item)]),
-    );
-  }
-
-  return null;
-}
-
-function toJsonObject(value: Record<string, unknown>): JsonInputObject {
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([, item]) => item !== undefined)
-      .map(([key, item]) => [key, toJsonValue(item)]),
-  );
 }
 
 function deduplicateNormalizedPapers(normalizedPapers: Array<NormalizedOpenAlexPaper | null>) {
@@ -326,27 +293,7 @@ function getOpenAlexRequestErrorMessage(error: unknown, page: number) {
 
 async function saveOpenAlexPaper(paper: NormalizedOpenAlexPaper, categoryId: string, fetchedAt: Date) {
   await prisma.paper.create({
-    data: {
-      title: paper.title,
-      abstract: paper.abstract,
-      authors: paper.authors,
-      publicationYear: paper.publicationYear,
-      doi: paper.doi,
-      sourceName: paper.sourceName ?? "OpenAlex",
-      sourceUrl: paper.sourceUrl,
-      pdfUrl: paper.pdfUrl,
-      categoryId,
-      keywords: paper.keywords,
-      status: "pending",
-      sources: {
-        create: {
-          provider: OPENALEX_PROVIDER,
-          externalId: paper.openAlexId,
-          rawMetadata: toJsonObject(paper.rawMetadata),
-          fetchedAt,
-        },
-      },
-    },
+    data: buildOpenAlexPaperCreateData(paper, categoryId, fetchedAt),
   });
 }
 
