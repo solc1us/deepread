@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 
+import { DeepReadMark } from "./deepread-brand";
 import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 
@@ -27,10 +28,12 @@ export default function PublicNavbar({ session, isPending }: PublicNavbarProps) 
     <header className="border-b bg-card/95">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:flex-nowrap sm:gap-4">
         <div className="flex items-center gap-4 sm:gap-7">
-          <Link className="flex items-center gap-2 text-sm font-semibold text-foreground" href="/">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-              DR
-            </span>
+          <Link
+            aria-label="DeepRead home"
+            className="flex items-center gap-2 text-sm font-semibold text-foreground"
+            href="/"
+          >
+            <DeepReadMark alt="" priority />
             <span>DeepRead</span>
           </Link>
           <nav className="hidden min-h-9 gap-1 text-sm sm:flex" aria-label="Public navigation">

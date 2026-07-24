@@ -2,16 +2,18 @@
 
 import { Button } from "@deepread/ui/components/button";
 import { cn } from "@deepread/ui/lib/utils";
-import { BarChart3, BookOpen, FileCheck2, FileText, LayoutDashboard, ListRestart, LogOut, Menu, NotebookPen, ShieldCheck, UserRound, X } from "lucide-react";
+import { BarChart3, BookOpen, FileCheck2, FileText, LayoutDashboard, ListRestart, Menu, NotebookPen, ShieldCheck, UserRound, X } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
-import { queryClient } from "@/utils/trpc";
+import { useSignOut } from "@/hooks/use-sign-out";
 
+import { DeepReadMark } from "./deepread-brand";
 import { ModeToggle } from "./mode-toggle";
+import SignOutPending, { SignOutLabel } from "./sign-out-pending";
 
 type NavigationItem = {
   href: string;
@@ -54,21 +56,9 @@ function isActiveRoute(pathname: string, href: string) {
 
 export default function AppSidebar({ children, isAdmin, session }: AppSidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isSigningOut, signOut } = useSignOut();
   const workspaceName = isAdmin ? "Admin workspace" : "Reading workspace";
-
-  const handleSignOut = () => {
-    authClient.signOut({
-      fetchOptions: {
-        onSuccess: () => {
-          queryClient.clear();
-          router.replace("/");
-          router.refresh();
-        },
-      },
-    });
-  };
 
   const renderNavigationLinks = (items: NavigationItem[]) =>
     items.map(({ href, icon: Icon, label }) => (
@@ -106,9 +96,15 @@ export default function AppSidebar({ children, isAdmin, session }: AppSidebarPro
           <span className="truncate text-sm font-medium">{session.user.name}</span>
           <span className="truncate text-xs text-muted-foreground">{session.user.email}</span>
         </div>
-        <Button className="justify-start" onClick={handleSignOut} variant="outline">
-          <LogOut data-icon="inline-start" />
-          Logout
+        <Button
+          aria-busy={isSigningOut}
+          className="justify-start"
+          disabled={isSigningOut}
+          onClick={signOut}
+          type="button"
+          variant="outline"
+        >
+          <SignOutLabel idleLabel="Logout" isPending={isSigningOut} />
         </Button>
       </div>
     </>
@@ -125,9 +121,15 @@ export default function AppSidebar({ children, isAdmin, session }: AppSidebarPro
           <span className="truncate text-sm font-medium">{session.user.name}</span>
           <span className="truncate text-xs text-muted-foreground">{session.user.email}</span>
         </div>
-        <Button className="justify-start" onClick={handleSignOut} variant="outline">
-          <LogOut data-icon="inline-start" />
-          Logout
+        <Button
+          aria-busy={isSigningOut}
+          className="justify-start"
+          disabled={isSigningOut}
+          onClick={signOut}
+          type="button"
+          variant="outline"
+        >
+          <SignOutLabel idleLabel="Logout" isPending={isSigningOut} />
         </Button>
       </div>
     </>
@@ -135,11 +137,14 @@ export default function AppSidebar({ children, isAdmin, session }: AppSidebarPro
 
   return (
     <div className="min-h-svh bg-background md:grid md:grid-cols-[15rem_minmax(0,1fr)]">
+      <SignOutPending isPending={isSigningOut} />
       <aside className="sticky top-0 hidden h-svh border-r bg-card px-3 py-5 md:flex md:flex-col md:gap-6">
-        <Link className="flex items-center gap-2 px-2 text-sm font-semibold text-foreground" href="/">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-            DR
-          </span>
+        <Link
+          aria-label="DeepRead home"
+          className="flex items-center gap-2 px-2 text-sm font-semibold text-foreground"
+          href="/"
+        >
+          <DeepReadMark alt="" />
           DeepRead
         </Link>
         {navigationContent}
@@ -150,10 +155,12 @@ export default function AppSidebar({ children, isAdmin, session }: AppSidebarPro
 
       <div className="min-w-0">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-card/95 px-4 py-3 md:hidden">
-          <Link className="flex items-center gap-2 text-sm font-semibold text-foreground" href="/">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-              DR
-            </span>
+          <Link
+            aria-label="DeepRead home"
+            className="flex items-center gap-2 text-sm font-semibold text-foreground"
+            href="/"
+          >
+            <DeepReadMark alt="" />
             DeepRead
           </Link>
           <div className="flex items-center gap-2">
