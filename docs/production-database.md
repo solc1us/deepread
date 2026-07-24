@@ -7,9 +7,11 @@ DeepRead uses separate database targets:
 | Local integration/E2E | Local isolated PostgreSQL/Supabase via `.env.test.local` |
 | Development | Existing cloud Supabase development project |
 | Preview | Explicit non-production target selected by the owner |
-| Production | Separate empty Supabase project created manually by the owner |
+| Production | Separate Supabase project configured manually by the owner |
 
 `DATABASE_URL` is the pooled application runtime connection. `DIRECT_URL` is the direct connection used by Prisma migrations and administrative checks. Neither value belongs in browser environment variables.
+
+Current release details: [DeepRead Version 1](release.md).
 
 ## Commands
 

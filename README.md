@@ -4,9 +4,9 @@ DeepRead is a calm academic reading application that helps students find
 beginner-friendly open-access papers, understand their estimated difficulty,
 and track their reading.
 
-The MVP is packaged as separate Next.js web and Express API applications. A
-Vercel Preview pair has been tested; production deployment and production
-database setup remain owner-operated steps.
+Version 1 is available at
+[deepread-academic.vercel.app](https://deepread-academic.vercel.app/), backed
+by a separate Express API. See the [release record](docs/release.md).
 
 ## MVP Features
 
@@ -257,5 +257,4 @@ Increase only after reviewing Vercel duration and persisted pipeline results.
 - Admin ingestion and classification run synchronously; no queue, worker,
   scheduler, or cron is deployed.
 - Duplicate-title matches are review candidates, not automatic duplicates.
-- Production URLs and the separate production Supabase project still require
-  owner configuration.
+- Login and registration visual refinement remains post-release work.

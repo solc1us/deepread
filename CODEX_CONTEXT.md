@@ -33,11 +33,10 @@ Core MVP:
 - Phases 1-10 are complete.
 - Phase 11 testing, security, reliability, environment, database, and Vercel
   preparation are implemented.
-- The paired Vercel Preview web/API architecture has been tested.
-- Production is not launched.
-- Remaining owner work: create/configure the separate production Supabase
-  project, run guarded migrations, configure production Vercel values, deploy,
-  and complete acceptance/smoke testing.
+- Version 1 was released on 24 July 2026.
+- Production web: `https://deepread-academic.vercel.app/`
+- Production API: `https://deepread-academic-api.vercel.app/`
+- Preview rehearsal and production smoke testing passed.
 
 ## Architecture
 
@@ -254,8 +253,8 @@ GitHub Actions runs one database-free `bun run validate` job plus
 - `DATABASE_URL` is the pooled application runtime connection.
 - `DIRECT_URL` is the matching direct migration/admin connection.
 - Local test, development, Preview, and production targets must be explicit.
-- Production uses a separate empty Supabase project; do not copy development
-  data automatically.
+- Production uses a separate Supabase project; do not copy development data
+  automatically.
 - Production migration uses guarded `prisma migrate deploy`.
 - Never run `db push`, `migrate reset`, seeds, or migrations from Vercel build
   or function startup.
@@ -271,10 +270,9 @@ See:
 - `docs/vercel-deployment.md`
 - `docs/database-security-checklist.md`
 
-## Current Phase 11 Focus
+## Current Release Focus
 
-- owner production Supabase setup and security checklist;
-- guarded production migration rehearsal;
-- production Vercel environment configuration;
-- production deployment and smoke tests;
-- final acceptance testing and release decision.
+- monitor production health, request duration, and pipeline logs;
+- maintain database backup/recovery and Supabase security checks;
+- refine login and registration presentation;
+- improve evaluated Indonesian-language classification coverage.

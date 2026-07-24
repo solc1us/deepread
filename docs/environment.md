@@ -48,7 +48,10 @@ origins.
 
 Configure the API variables on the API deployment. Configure `API_UPSTREAM_URL` and `NEXT_PUBLIC_SERVER_URL` on the web deployment. Use a pooled Supabase connection for `DATABASE_URL`; keep `DIRECT_URL` outside Vercel for the separate manual migration workflow. Generate a unique production `BETTER_AUTH_SECRET`; placeholder secrets and local API, web, or database origins are rejected by production validation and builds.
 
-Development and production database targets must remain separate. The existing cloud Supabase project is development-only; the owner will create and configure a separate empty production project manually. See [`production-database.md`](production-database.md) for the guarded migration workflow. No Supabase or Vercel setting is changed by this contract.
+Development and production database targets remain separate. Production uses a
+separately configured Supabase project. See
+[`production-database.md`](production-database.md) for the guarded migration
+workflow.
 
 ## MVP Authentication Limits
 

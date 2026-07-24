@@ -4,6 +4,8 @@ This guide covers the existing administrator and deployment operations. It
 does not replace database backups, Vercel project controls, or Supabase
 security review.
 
+Current release details: [DeepRead Version 1](release.md).
+
 ## Admin Access
 
 Admin UI routes require an authenticated Better Auth session. Every admin tRPC

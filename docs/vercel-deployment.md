@@ -7,9 +7,9 @@ deepread-web  -> apps/web
 deepread-api  -> apps/server
 ```
 
-The paired Preview architecture has been built and exercised. Production
-domains, production environment values, and the separate production database
-still require owner configuration.
+The paired Preview architecture and Version 1 production deployment have been
+exercised. Current URLs and validation evidence are recorded in the
+[Version 1 release record](release.md).
 
 ## Project Settings
 
