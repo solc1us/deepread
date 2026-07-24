@@ -1,13 +1,15 @@
-# Vercel Deployment Preparation
+# Vercel Deployment
 
-DeepRead will use two Vercel Hobby projects connected to the same Git repository:
+DeepRead uses two Vercel Hobby projects connected to the same Git repository:
 
 ```text
 deepread-web  -> apps/web
 deepread-api  -> apps/server
 ```
 
-This document is preparation only. Do not deploy until the Phase 11.8 owner checklist is complete.
+The paired Preview architecture has been built and exercised. Production
+domains, production environment values, and the separate production database
+still require owner configuration.
 
 ## Project Settings
 
@@ -46,7 +48,7 @@ Use placeholders only in documentation. Every environment change requires a new 
 
 | Variable | Preview | Production |
 | --- | --- | --- |
-| `DATABASE_URL` | Pooled URL for the isolated preview database target | Pooled URL for the production database |
+| `DATABASE_URL` | Pooled URL for the explicitly selected non-production database | Pooled URL for the production database |
 | `BETTER_AUTH_SECRET` | Unique preview secret | Unique production secret |
 | `BETTER_AUTH_URL` | Exact paired preview web origin | Exact production web origin |
 | `CORS_ORIGIN` | Exact paired preview web origin | Exact production web origin |
@@ -79,24 +81,39 @@ Repeat the same exact-origin setup with production domains. Never make CORS perm
 
 ## Admin Pipeline Duration
 
-Vercel Hobby Functions with Fluid compute currently allow up to 300 seconds. Keep the initial function maximum at 300 seconds and validate real production timings.
+Ingestion and classification are synchronous request-bound operations. Actual
+Vercel duration depends on the selected plan, current platform limits, OpenAlex
+latency, and database latency. Use conservative limits until production timing
+is observed.
 
 | Operation | MVP guidance |
 | --- | --- |
 | Metadata remediation | Small transaction; expected to complete comfortably. |
 | Duplicate merge | Usually bounded to one candidate group; review relation counts and keep early production groups small. |
-| Classification batch | Bounded concurrency is 8 and the application cap is 500; begin with 100-250 papers until production timings are known. |
-| OpenAlex ingestion | Five external pages and concurrent database writes can approach request limits when OpenAlex is slow; begin with 100-125 papers. |
+| Classification batch | Bounded concurrency is 8 and the application cap is 500; begin with 5-25 papers. |
+| OpenAlex ingestion | Requests paginate at 100 and database writes use concurrency 8; begin with 5-25 papers. |
 
-No queue or worker is required for initial controlled use. Larger or repeatedly slow ingestion/classification workloads need later architectural work rather than higher request limits.
+Increase a batch only after reviewing the completed request duration and admin
+logs. No queue or worker is deployed. Larger or repeatedly slow workloads need
+later architectural work rather than higher request limits.
 
-## Phase 11.8 Owner Actions
+## Production Owner Actions
 
-1. Create `deepread-web` and `deepread-api` from the same repository.
-2. Apply the project settings and enable source access outside each Root Directory.
-3. Create the separate production Supabase project and run the guarded migrations manually.
-4. Configure Preview and Production environment variables with exact paired origins.
-5. Deploy the deterministic preview pair and complete health, auth, public, user, and admin smoke tests.
-6. Deploy production, verify `/health` and `/ready`, then create the first production user and assign admin access manually.
-7. Confirm the Supabase Data API, grants, backups, pooling, and secret-rotation checklist.
-8. Retain the previous healthy Vercel deployment and database recovery point for rollback.
+1. Confirm both Vercel projects retain the settings above and source access
+   outside each Root Directory.
+2. Create the separate production Supabase project and recovery point.
+3. Configure exact Production environment values for both projects.
+4. Run guarded production migration status, deploy, validation, and smoke
+   checks outside Vercel.
+5. Deploy the API and verify `/health` and `/ready`.
+6. Deploy the web application and complete auth, public, reader, and admin
+   smoke tests.
+7. Create the first production account and assign admin access manually.
+8. Confirm the Supabase Data API, grants, backups, pooling, and
+   secret-rotation checklist.
+9. Retain the previous healthy Vercel deployment and database recovery point
+   for rollback.
+
+Use the full [MVP Operations](operations.md) production smoke checklist. An
+application rollback promotes a prior Vercel deployment; it does not reverse a
+database migration.

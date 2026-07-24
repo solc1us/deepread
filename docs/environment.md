@@ -11,7 +11,7 @@ Server-only values:
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` | Pooled PostgreSQL runtime connection used by Prisma. |
-| `DIRECT_URL` | Direct PostgreSQL connection used by Prisma migrations and validation. |
+| `DIRECT_URL` | Direct PostgreSQL connection used by guarded migrations and database checks. |
 | `BETTER_AUTH_SECRET` | Private Better Auth signing secret, at least 32 characters. |
 | `BETTER_AUTH_URL` | Exact browser-facing web origin, for example `http://localhost:3001`. |
 | `CORS_ORIGIN` | Exact web origin, for example `http://localhost:3001`. |
@@ -29,9 +29,20 @@ Web project values:
 
 Browser requests use relative `/api/auth/*` and `/trpc/*` paths. Next.js proxies them to `API_UPSTREAM_URL`; that server-only value must never enter client code. `BETTER_AUTH_URL`, `CORS_ORIGIN`, and `NEXT_PUBLIC_SERVER_URL` use the exact web origin. Database URLs and `BETTER_AUTH_SECRET` must never use a `NEXT_PUBLIC_` prefix. Production and preview origins must use explicit HTTPS values.
 
+Better Auth cookies are created through the web-origin proxy with `httpOnly`,
+`SameSite=Lax`, and `Secure` in production. Origin and CSRF checks remain
+enabled. Route guards wait for a successful session check and provide UX only;
+tRPC session ownership and the database-backed admin guard remain authoritative.
+
 ## Integration And E2E
 
 Copy `.env.test.example` to the ignored `.env.test.local`. Database-backed tests require `TEST_DATABASE_URL`, `TEST_DIRECT_URL` where specified, and `DEEPREAD_TEST_DATABASE_CONFIRMATION=deepread-test-only`. The guarded harness rejects missing confirmation and connections matching development URLs. Normal `bun test` and `bun run validate` remain database-free.
+
+`bun run test:integration:migrate` applies only checked-in migrations to the
+confirmed test database. Integration and E2E fixtures use unique run
+identifiers and remove only test-owned records. The E2E runner starts local web
+and API processes, uses one Chromium worker, and blocks unexpected browser
+origins.
 
 ## Preview And Production
 
@@ -44,4 +55,5 @@ Development and production database targets must remain separate. The existing c
 - Users can register with email and password.
 - Email ownership is not verified in the MVP.
 - Forgotten passwords cannot be recovered automatically in the MVP.
-- The existing administrator account is unchanged.
+- Administrator promotion is manual.
+- Role changes may require a session refresh or logout/login.

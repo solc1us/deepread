@@ -6,7 +6,7 @@ DeepRead uses separate database targets:
 | --- | --- |
 | Local integration/E2E | Local isolated PostgreSQL/Supabase via `.env.test.local` |
 | Development | Existing cloud Supabase development project |
-| Preview | Explicit non-production target when introduced |
+| Preview | Explicit non-production target selected by the owner |
 | Production | Separate empty Supabase project created manually by the owner |
 
 `DATABASE_URL` is the pooled application runtime connection. `DIRECT_URL` is the direct connection used by Prisma migrations and administrative checks. Neither value belongs in browser environment variables.
@@ -23,6 +23,10 @@ bun run db:smoke
 ```
 
 `db:migrate:dev` runs `prisma migrate dev` and is limited to local/development targets. `db:migrate:deploy` runs `prisma migrate deploy`, never seeds data, and requires an explicit remote production target plus confirmation. Production must never use `prisma db push` or `prisma migrate reset`. Run `bun run db:seed` only as a separate, deliberate local-development action.
+
+Vercel install, build, function startup, and deployment do not run migrations
+or seeds. Keep `DIRECT_URL` in the owner's migration environment rather than
+the Vercel runtime.
 
 Remote commands require `DEEPREAD_DATABASE_TARGET` so an unclassified URL is rejected. Commands print only the database host, database name, target classification, and local/remote status; credentials and complete URLs are never printed.
 
@@ -51,7 +55,15 @@ Remote commands require `DEEPREAD_DATABASE_TARGET` so an unclassified URL is rej
 9. Create the first production account later through the deployed application.
 10. Assign that account the admin role manually only after the production application is available.
 
-Do not copy development data or run the development seed. If migration deployment fails, stop, retain the Prisma output, and use the Supabase recovery point or a reviewed forward migration. Do not reset the production database.
+Do not copy development data or run the development seed. If migration
+deployment fails, stop, retain the sanitized Prisma output, and use the
+Supabase recovery point or a reviewed forward migration. Do not reset the
+production database. After a successful migration, verify API `/ready`, then
+complete the application smoke checklist in [`operations.md`](operations.md).
+
+Application rollback and database recovery are separate. Promoting a previous
+Vercel deployment does not undo a migration. Confirm schema compatibility
+before rolling application code backward.
 
 ## Isolated Test Migration
 
