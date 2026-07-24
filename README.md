@@ -6,7 +6,8 @@ and track their reading.
 
 Version 1 is available at
 [deepread-academic.vercel.app](https://deepread-academic.vercel.app/), backed
-by a separate Express API. See the [release record](docs/release.md).
+by a separate Express API. See the [release record](docs/release.md) and
+[final acceptance](docs/final-acceptance.md).
 
 ## MVP Features
 
@@ -257,4 +258,3 @@ Increase only after reviewing Vercel duration and persisted pipeline results.
 - Admin ingestion and classification run synchronously; no queue, worker,
   scheduler, or cron is deployed.
 - Duplicate-title matches are review candidates, not automatic duplicates.
-- Login and registration visual refinement remains post-release work.

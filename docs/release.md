@@ -9,6 +9,9 @@
 | Web | [https://deepread-academic.vercel.app/](https://deepread-academic.vercel.app/) |
 | API | [https://deepread-academic-api.vercel.app/](https://deepread-academic-api.vercel.app/) |
 
+Final acceptance is recorded in
+[DeepRead Version 1 Final Acceptance](final-acceptance.md).
+
 ## Included
 
 - Published paper library with search, filters, sorting, pagination, and detail.
@@ -69,7 +72,6 @@ operation and do not run during Vercel build or startup.
 - OpenAlex is the only implemented ingestion provider.
 - Full-text PDF parsing is not implemented.
 - Indonesian-language classification coverage is limited.
-- Login and registration visual refinement remains planned post-release work.
 
 ## Post-Release Priorities
 
@@ -78,7 +80,6 @@ operation and do not run during Vercel build or startup.
   production evidence.
 - Verify database backup/recovery and Supabase security controls regularly.
 - Improve Indonesian-language classifier coverage using evaluated changes.
-- Refine login and registration presentation without changing auth boundaries.
 
 ## Rollback And Operations
 

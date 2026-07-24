@@ -31,9 +31,8 @@ Core MVP:
 ## Release Status
 
 - Phases 1-10 are complete.
-- Phase 11 testing, security, reliability, environment, database, and Vercel
-  preparation are implemented.
-- Version 1 was released on 24 July 2026.
+- Phase 11 is complete.
+- Version 1 was accepted and released on 24 July 2026.
 - Production web: `https://deepread-academic.vercel.app/`
 - Production API: `https://deepread-academic-api.vercel.app/`
 - Preview rehearsal and production smoke testing passed.
@@ -77,11 +76,8 @@ Browser
   workflow, profiling, and bounded concurrency
 - Phase 10: dataset audit, remediation, needs-review workflow, and safe
   duplicate resolution
-
-In progress:
-
-- Phase 11: final owner deployment, production validation, acceptance testing,
-  and release documentation
+- Phase 11: testing, security, reliability, deployment preparation, production
+  validation, acceptance testing, and release documentation
 
 Deferred:
 
@@ -274,5 +270,4 @@ See:
 
 - monitor production health, request duration, and pipeline logs;
 - maintain database backup/recovery and Supabase security checks;
-- refine login and registration presentation;
 - improve evaluated Indonesian-language classification coverage.
